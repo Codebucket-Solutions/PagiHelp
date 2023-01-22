@@ -1,4 +1,4 @@
-# Pagi Help
+# PagiHelp
 
 Generalized api helper for  search and filter with pagination for mysql
 
