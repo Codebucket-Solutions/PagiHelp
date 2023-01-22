@@ -33,9 +33,10 @@ class PagiHelp {
     });
 
   tupleCreator = (tuple, replacements, asItIs = false) => {
-    if(!allowedOperators.includes(tuple[1].toUpperCase()))
+    if(!asItIs&&!allowedOperators.includes(tuple[1].toUpperCase()))
         throw "Invalid Operator"
-    tuple[0] = SqlString.escape(tuple[0]);
+    if(!asItIs)
+        tuple[0] = SqlString.escapeId(tuple[0]);
     let query = `${this.columnNameConverter(tuple[0])} ${tuple[1]}`;
     if (asItIs) query = `${tuple[0]} ${tuple[1]}`;
     if (tuple[2] instanceof Array) {
