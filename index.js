@@ -4,6 +4,7 @@ let rtrim = (str, chr) => {
 };
 
 let allowedOperators= ['>','>=','<','<=','=','!=','<>','IN','NOT IN','! IN','IS','IS NOT','LIKE','RLIKE','MEMBER OF']
+let allowedSorts = ['ASC','DESC']
 let SqlString = require('sqlstring');
 class PagiHelp {
   constructor(options) {
@@ -202,12 +203,17 @@ class PagiHelp {
 
     let sort = paginationObject.sort;
     if (sort && Object.keys(sort).length !== 0) {
+      for(let i = 0; i < sort.sorts.length; i++) {
+        if(!allowedSorts.includes(sort.sorts[i].toUpperCase())) 
+            throw "INVALID SORT VALUE";
+        sort.sorts[i] = sort.sorts[i].toUpperCase()
+      }
       for (let i = 0; i < sort.attributes.length; i++) {
         orderByQuery =
           orderByQuery +
-          "`" +
-          this.columnNameConverter(sort.attributes[i]) +
-          "` " +
+          "" +
+          this.columnNameConverter(SqlString.escapeId(sort.attributes[i])) +
+          "" +
           sort.sorts[i] +
           ",";
       }
