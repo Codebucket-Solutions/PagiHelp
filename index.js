@@ -139,7 +139,7 @@ class PagiHelp {
         allAliases.add(col.alias);
       }
     }
-    allAliases = [...allAliases].sort();
+    allAliases = [...allAliases].sort((a, b) => a - b);
     for (let i = 0; i < data.length; i++) {
       for (let j = 0; j < allAliases.length; j++) {
         if (
