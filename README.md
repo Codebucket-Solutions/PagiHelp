@@ -16,7 +16,7 @@ const pagiHelp = require("pagi-help")
 
 PagiHelp Is a helper utility which can be used to generalize and manage server side offset pagination (As of now only for mysql) . It comprises of two sections.
 
-![[diagram.png]]
+![alt text](https://github.com/Codebucket-Solutions/PagiHelp/blob/master/diagram.png)
 
 #### Body
 
