@@ -3,6 +3,8 @@ let rtrim = (str, chr) => {
   return str.replace(rgxtrim, "");
 };
 
+let allowedOperators= ['>','>=','<','<=','=','!=','<>','IN','NOT IN','! IN','IS','IS NOT','LIKE','RLIKE','MEMBER OF']
+let SqlString = require('sqlstring');
 class PagiHelp {
   constructor(options) {
     if(options) {
@@ -31,6 +33,9 @@ class PagiHelp {
     });
 
   tupleCreator = (tuple, replacements, asItIs = false) => {
+    if(!allowedOperators.includes(tuple[1].toUpperCase()))
+        throw "Invalid Operator"
+    tuple[0] = SqlString.escape(tuple[0]);
     let query = `${this.columnNameConverter(tuple[0])} ${tuple[1]}`;
     if (asItIs) query = `${tuple[0]} ${tuple[1]}`;
     if (tuple[2] instanceof Array) {
@@ -150,12 +155,12 @@ class PagiHelp {
         else {
           if (!data[i]["columnList"][j]) {
             data[i]["columnList"][j] = {
-              statement: "''",
+              statement: "(NULL)",
               alias: allAliases[j],
             };
           } else {
             data[i]["columnList"].splice(j, 0, {
-              statement: "''",
+              statement: "(NULL)",
               alias: allAliases[j],
             });
           }
