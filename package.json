@@ -1,0 +1,18 @@
+{
+  "name": "pagi-help",
+  "version": "1.0.4",
+  "description": "Pagination Api Helper For Mysql",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "pagination",
+    "mysql",
+    "page",
+    "search",
+    "util"
+  ],
+  "author": "Abhinav Gautam",
+  "license": "MIT"
+}
