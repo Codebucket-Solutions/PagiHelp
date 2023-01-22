@@ -1,6 +1,6 @@
 {
   "name": "pagi-help",
-  "version": "1.0.4",
+  "version": "1.0.6",
   "description": "Pagination Api Helper For Mysql",
   "main": "index.js",
   "scripts": {
@@ -13,6 +13,10 @@
     "search",
     "util"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Codebucket-Solutions/PagiHelp.git"
+  },
   "author": "Abhinav Gautam",
   "license": "MIT"
 }
