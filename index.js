@@ -3,7 +3,7 @@ let rtrim = (str, chr) => {
   return str.replace(rgxtrim, "");
 };
 
-let allowedOperators= ['>','>=','<','<=','=','!=','<>','IN','NOT IN','! IN','IS','IS NOT','LIKE','RLIKE','MEMBER OF']
+let allowedOperators= ['>','>=','<','<=','=','!=','<>','IN','NOT IN','! IN','IS','IS NOT','LIKE','RLIKE','MEMBER OF','JSON_CONTAINS']
 let allowedSorts = ['ASC','DESC']
 let SqlString = require('sqlstring');
 class PagiHelp {
@@ -38,16 +38,28 @@ class PagiHelp {
         throw "Invalid Operator"
     if(!asItIs)
         tuple[0] = SqlString.escapeId(tuple[0]);
-    let query = `${this.columnNameConverter(tuple[0])} ${tuple[1]}`;
-    if (asItIs) query = `${tuple[0]} ${tuple[1]}`;
-    if (tuple[2] instanceof Array) {
-      query += " (" + "?,".repeat(tuple[2].length).slice(0, -1) + ")";
-      replacements.push(...tuple[2]);
+    
+    if(tuple[1].toUpperCase()=='JSON_CONTAINS') {
+      let query = ''
+        query = `${tuple[1]}(${this.columnNameConverter(tuple[0])},?)`;
+        if(tuple[2] && typeof tuple[2]  === 'object')
+          replacements.push(JSON.stringify(tuple[2]));
+        else
+          replacements.push(tuple[2]);
+        return query;
     } else {
-      query += ` ?`;
-      replacements.push(tuple[2]);
+      let query = `${this.columnNameConverter(tuple[0])} ${tuple[1]}`;
+      if (asItIs) query = `${tuple[0]} ${tuple[1]}`;
+      if (tuple[2] instanceof Array) {
+        query += " (" + "?,".repeat(tuple[2].length).slice(0, -1) + ")";
+        replacements.push(...tuple[2]);
+      } else {
+        query += ` ?`;
+        replacements.push(tuple[2]);
+      }
+      return query;
     }
-    return query;
+    
   };
 
   genSchema = (schemaArray, replacements, asItIs = false) => {
@@ -119,13 +131,18 @@ class PagiHelp {
       havingQuery = "";
     }
 
-    whereQuery = whereQuery + "( ";
-    for (let column of searchColumnList) {
+    if(searchColumnList && searchColumnList.length>0) {
+      whereQuery = whereQuery + "( ";
+      for (let column of searchColumnList) {
       whereQuery = whereQuery + column + " LIKE ? OR ";
       replacements.push(`%${paginationObject.search}%`);
+      }
+      whereQuery = rtrim(whereQuery, "OR ");
+      whereQuery = whereQuery + " )";
+    } else {
+      whereQuery = rtrim(whereQuery, "AND ");
     }
-    whereQuery = rtrim(whereQuery, "OR ");
-    whereQuery = whereQuery + " )";
+    
 
     query = query + whereQuery + " " + havingQuery;
     countQuery = countQuery + whereQuery + " " + havingQuery;
@@ -227,6 +244,9 @@ class PagiHelp {
 
       query = query + " LIMIT ?,?";
       replacements.push(offset, paginationObject.itemsPerPage);
+    } else if(paginationObject.offset && paginationObject.limit ) {
+      query = query + " LIMIT ?,?";
+      replacements.push(paginationObject.offset,paginationObject.limit)
     }
 
     return {
