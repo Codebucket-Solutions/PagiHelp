@@ -109,6 +109,13 @@ class PagiHelp {
       "`" +
       joinQuery;
 
+      let totalCountQuery =
+      "SELECT COUNT(*) AS countValue " +
+      " FROM `" +
+      tableName +
+      "`" +
+      joinQuery;
+
     let replacements = [];
 
     let whereQuery = " WHERE ";
@@ -146,11 +153,13 @@ class PagiHelp {
 
     query = query + whereQuery + " " + havingQuery;
     countQuery = countQuery + whereQuery + " " + havingQuery;
+    totalCountQuery = totalCountQuery + whereQuery;
     replacements.push(...havingReplacements);
     console.log(replacements);
     return {
       query,
       countQuery,
+      totalCountQuery,
       replacements,
     };
   };
@@ -196,6 +205,7 @@ class PagiHelp {
     }
     let query = "";
     let countQuery = "";
+    let totalCountQuery = "";
     let orderByQuery = "ORDER BY ";
     let replacements = [];
     options = this.filler(options);
@@ -212,11 +222,13 @@ class PagiHelp {
 
       query = query + queryObject.query + " UNION ALL ";
       countQuery = countQuery + queryObject.countQuery + " UNION ALL ";
+      totalCountQuery = totalCountQuery + queryObject.totalCountQuery + " UNION ALL ";
       replacements.push(...queryObject.replacements);
     }
 
     query = rtrim(query, "UNION ALL ");
     countQuery = rtrim(countQuery, "UNION ALL ");
+    totalCountQuery = rtrim(totalCountQuery, "UNION ALL ");
 
     let sort = paginationObject.sort;
     if (sort && Object.keys(sort).length !== 0) {
@@ -251,6 +263,7 @@ class PagiHelp {
 
     return {
       countQuery,
+      totalCountQuery,
       query,
       replacements,
     };
