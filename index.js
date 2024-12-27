@@ -90,6 +90,46 @@ class PagiHelp {
     columnList = [{ name: "*" }],
     additionalWhereConditions = []
   ) => {
+    let filters = paginationObject.filters;
+
+    if (filters && filters.length > 0) {    
+        // Function to convert snake_case to camelCase
+        const toCamelCase = (str) => {
+          return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+        };
+        
+        let additionalWhereConditionsForTotalCountQuery = [];
+
+        filters.forEach(condition => {
+        const [field, operator, value] = condition;
+        
+        // Convert field to camelCase
+        const camelCaseField = toCamelCase(field);
+        
+        // Find the column matching the alias
+        const column = columnList.find(col => toCamelCase(col.alias) === camelCaseField);
+
+        if (column) {
+          let fieldName;
+        
+          if (column.statement) {
+            fieldName = column.statement;
+          } else if (column.prefix) {
+            fieldName = `${column.prefix}.${column.name}`;
+          } else {
+            fieldName = column.name;
+          }
+      
+          additionalWhereConditionsForTotalCountQuery.push([fieldName, operator, value]);
+        }
+      });
+      
+      additionalWhereConditions = [
+        ...additionalWhereConditions,
+        ...additionalWhereConditionsForTotalCountQuery,
+      ];
+    }
+
     columnList = this.columNames(columnList);
     searchColumnList = this.columNames(searchColumnList);
 
@@ -127,17 +167,6 @@ class PagiHelp {
         " AND ";
     }
 
-    let havingQuery = " HAVING ";
-    let havingReplacements = [];
-
-    let filters = paginationObject.filters;
-
-    if (filters && filters.length > 0) {
-      havingQuery = havingQuery + this.genSchema(filters, havingReplacements);
-    } else {
-      havingQuery = "";
-    }
-
     if(searchColumnList && searchColumnList.length>0) {
       whereQuery = whereQuery + "( ";
       for (let column of searchColumnList) {
@@ -151,10 +180,9 @@ class PagiHelp {
     }
     
 
-    query = query + whereQuery + " " + havingQuery;
-    countQuery = countQuery + whereQuery + " " + havingQuery;
+    query = query + whereQuery;
+    countQuery = countQuery + whereQuery;
     totalCountQuery = totalCountQuery + whereQuery;
-    replacements.push(...havingReplacements);
     console.log(replacements);
     return {
       query,
