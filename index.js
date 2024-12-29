@@ -39,7 +39,12 @@ class PagiHelp {
   
     // Skip escaping if tuple[0] starts with "(" (indicating it's a statement)
     if (!asItIs && tuple[0].trim().startsWith("(")) {
-      return `${tuple[0]}`;
+      let query = `${tuple[0]}`;
+      if (tuple[1] && tuple[2] !== undefined) {
+          query += ` ${tuple[1]} ?`;
+          replacements.push(tuple[2]);
+      }
+      return query;
     }
 
     // Escape column names only
