@@ -36,8 +36,16 @@ class PagiHelp {
   tupleCreator = (tuple, replacements, asItIs = false) => {
     if(!asItIs&&!allowedOperators.includes(tuple[1].toUpperCase()))
         throw "Invalid Operator"
-    if(!asItIs)
-        tuple[0] = SqlString.escapeId(tuple[0]);
+  
+    // Skip escaping if tuple[0] starts with "(" (indicating it's a statement)
+    if (!asItIs && tuple[0].trim().startsWith("(")) {
+      return `${tuple[0]}`;
+    }
+
+    // Escape column names only
+    if (!asItIs && !tuple[0].includes(" ") && !tuple[0].includes("(")) {
+      tuple[0] = SqlString.escapeId(tuple[0]);
+    }
     
     if(tuple[1].toUpperCase()=='JSON_CONTAINS') {
       let query = ''
@@ -93,41 +101,54 @@ class PagiHelp {
     let filters = paginationObject.filters;
 
     if (filters && filters.length > 0) {    
-        // Function to convert snake_case to camelCase
-        const toCamelCase = (str) => {
-          return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
-        };
-        
-        let additionalWhereConditionsForTotalCountQuery = [];
-
-        filters.forEach(condition => {
-        const [field, operator, value] = condition;
-        
-        // Convert field to camelCase
-        const camelCaseField = toCamelCase(field);
-        
-        // Find the column matching the alias
-        const column = columnList.find(col => toCamelCase(col.alias) === camelCaseField);
-
-        if (column) {
-          let fieldName;
-        
-          if (column.statement) {
-            fieldName = column.statement;
-          } else if (column.prefix) {
-            fieldName = `${column.prefix}.${column.name}`;
-          } else {
-            fieldName = column.name;
+      // Function to convert snake_case to camelCase
+      const toCamelCase = (str) => {
+        return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+      };
+    
+      let additionalWhereConditionsForTotalCountQuery = [];
+    
+      const processCondition = (condition) => {
+        if (Array.isArray(condition[0])) {
+          // If condition[0] is an array, process each sub-condition and group them together
+          const nestedConditions = condition.map(subCondition => processCondition(subCondition).flat());
+          return [nestedConditions];
+        } else {
+          const [field, operator, value] = condition;
+  
+          // Convert field to camelCase
+          const camelCaseField = toCamelCase(field);
+    
+          // Find the column matching the alias
+          const column = columnList.find(col => toCamelCase(col.alias) === camelCaseField);
+    
+          if (column) {
+            let fieldName;
+    
+            if (column.statement) {
+              fieldName = column.statement;
+            } else if (column.prefix) {
+              fieldName = `${column.prefix}.${column.name}`;
+            } else {
+              fieldName = column.name;
+            }
+    
+            return [[fieldName, operator, value]];
           }
-      
-          additionalWhereConditionsForTotalCountQuery.push([fieldName, operator, value]);
-        }
-      });
-      
-      additionalWhereConditions = [
-        ...additionalWhereConditions,
-        ...additionalWhereConditionsForTotalCountQuery,
-      ];
+    
+          return []; // Return an empty array if no column matches
+          }
+        };
+    
+        filters.forEach(condition => {
+          const processedConditions = processCondition(condition);
+          additionalWhereConditionsForTotalCountQuery.push(...processedConditions);
+        });
+    
+        additionalWhereConditions = [
+          ...additionalWhereConditions,
+          ...additionalWhereConditionsForTotalCountQuery,
+        ];
     }
 
     columnList = this.columNames(columnList);
