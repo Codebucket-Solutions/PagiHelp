@@ -36,8 +36,21 @@ class PagiHelp {
   tupleCreator = (tuple, replacements, asItIs = false) => {
     if(!asItIs&&!allowedOperators.includes(tuple[1].toUpperCase()))
         throw "Invalid Operator"
-    if(!asItIs)
-        tuple[0] = SqlString.escapeId(tuple[0]);
+  
+    // Skip escaping if tuple[0] starts with "(" (indicating it's a statement)
+    if (!asItIs && tuple[0].trim().startsWith("(")) {
+      let query = `${tuple[0]}`;
+      if (tuple[1] && tuple[2] !== undefined) {
+          query += ` ${tuple[1]} ?`;
+          replacements.push(tuple[2]);
+      }
+      return query;
+    }
+
+    // Escape column names only
+    if (!asItIs && !tuple[0].includes(" ") && !tuple[0].includes("(")) {
+      tuple[0] = SqlString.escapeId(tuple[0]);
+    }
     
     if(tuple[1].toUpperCase()=='JSON_CONTAINS') {
       let query = ''
@@ -90,6 +103,59 @@ class PagiHelp {
     columnList = [{ name: "*" }],
     additionalWhereConditions = []
   ) => {
+    let filters = paginationObject.filters;
+
+    if (filters && filters.length > 0) {    
+      // Function to convert snake_case to camelCase
+      const toCamelCase = (str) => {
+        return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+      };
+    
+      let additionalWhereConditionsForTotalCountQuery = [];
+    
+      const processCondition = (condition) => {
+        if (Array.isArray(condition[0])) {
+          // If condition[0] is an array, process each sub-condition and group them together
+          const nestedConditions = condition.map(subCondition => processCondition(subCondition).flat());
+          return [nestedConditions];
+        } else {
+          const [field, operator, value] = condition;
+  
+          // Convert field to camelCase
+          const camelCaseField = toCamelCase(field);
+    
+          // Find the column matching the alias
+          const column = columnList.find(col => toCamelCase(col.alias) === camelCaseField);
+    
+          if (column) {
+            let fieldName;
+    
+            if (column.statement) {
+              fieldName = column.statement;
+            } else if (column.prefix) {
+              fieldName = `${column.prefix}.${column.name}`;
+            } else {
+              fieldName = column.name;
+            }
+    
+            return [[fieldName, operator, value]];
+          }
+    
+          return []; // Return an empty array if no column matches
+          }
+        };
+    
+        filters.forEach(condition => {
+          const processedConditions = processCondition(condition);
+          additionalWhereConditionsForTotalCountQuery.push(...processedConditions);
+        });
+    
+        additionalWhereConditions = [
+          ...additionalWhereConditions,
+          ...additionalWhereConditionsForTotalCountQuery,
+        ];
+    }
+
     columnList = this.columNames(columnList);
     searchColumnList = this.columNames(searchColumnList);
 
@@ -109,6 +175,13 @@ class PagiHelp {
       "`" +
       joinQuery;
 
+      let totalCountQuery =
+      "SELECT COUNT(*) AS countValue " +
+      " FROM `" +
+      tableName +
+      "`" +
+      joinQuery;
+
     let replacements = [];
 
     let whereQuery = " WHERE ";
@@ -118,17 +191,6 @@ class PagiHelp {
         whereQuery +
         this.genSchema(additionalWhereConditions, replacements, true) +
         " AND ";
-    }
-
-    let havingQuery = " HAVING ";
-    let havingReplacements = [];
-
-    let filters = paginationObject.filters;
-
-    if (filters && filters.length > 0) {
-      havingQuery = havingQuery + this.genSchema(filters, havingReplacements);
-    } else {
-      havingQuery = "";
     }
 
     if(searchColumnList && searchColumnList.length>0) {
@@ -144,13 +206,14 @@ class PagiHelp {
     }
     
 
-    query = query + whereQuery + " " + havingQuery;
-    countQuery = countQuery + whereQuery + " " + havingQuery;
-    replacements.push(...havingReplacements);
+    query = query + whereQuery;
+    countQuery = countQuery + whereQuery;
+    totalCountQuery = totalCountQuery + whereQuery;
     console.log(replacements);
     return {
       query,
       countQuery,
+      totalCountQuery,
       replacements,
     };
   };
@@ -196,6 +259,7 @@ class PagiHelp {
     }
     let query = "";
     let countQuery = "";
+    let totalCountQuery = "";
     let orderByQuery = "ORDER BY ";
     let replacements = [];
     options = this.filler(options);
@@ -212,11 +276,13 @@ class PagiHelp {
 
       query = query + queryObject.query + " UNION ALL ";
       countQuery = countQuery + queryObject.countQuery + " UNION ALL ";
+      totalCountQuery = totalCountQuery + queryObject.totalCountQuery + " UNION ALL ";
       replacements.push(...queryObject.replacements);
     }
 
     query = rtrim(query, "UNION ALL ");
     countQuery = rtrim(countQuery, "UNION ALL ");
+    totalCountQuery = rtrim(totalCountQuery, "UNION ALL ");
 
     let sort = paginationObject.sort;
     if (sort && Object.keys(sort).length !== 0) {
@@ -251,6 +317,7 @@ class PagiHelp {
 
     return {
       countQuery,
+      totalCountQuery,
       query,
       replacements,
     };
