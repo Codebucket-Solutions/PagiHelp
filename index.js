@@ -52,14 +52,15 @@ class PagiHelp {
       tuple[0] = SqlString.escapeId(tuple[0]);
     }
     
-    if(tuple[1].toUpperCase()=='JSON_CONTAINS') {
-      let query = ''
-        query = `${tuple[1]}(${this.columnNameConverter(tuple[0])},?)`;
-        if(tuple[2] && typeof tuple[2]  === 'object')
-          replacements.push(JSON.stringify(tuple[2]));
-        else
-          replacements.push(tuple[2]);
-        return query;
+    if (tuple[1].toUpperCase() === 'JSON_CONTAINS') {
+      const field = tuple[0].trim().startsWith('(') ? tuple[0] : this.columnNameConverter(tuple[0]);
+      let query = `${tuple[1]}(${field}, ?)`;
+      if (typeof tuple[2] === 'object') {
+        replacements.push(JSON.stringify(tuple[2]));
+      } else {
+        replacements.push(`"${tuple[2]}"`);
+      }
+      return query;
     } else {
       let query = `${this.columnNameConverter(tuple[0])} ${tuple[1]}`;
       if (asItIs) query = `${tuple[0]} ${tuple[1]}`;
