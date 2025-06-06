@@ -55,10 +55,10 @@ class PagiHelp {
     if (tuple[1].toUpperCase() === 'JSON_CONTAINS') {
       const field = tuple[0].trim().startsWith('(') ? tuple[0] : this.columnNameConverter(tuple[0]);
       let query = `${tuple[1]}(${field}, ?)`;
-      if (typeof tuple[2] === 'object') {
+      if (tuple[2] && typeof tuple[2] === 'object') {
         replacements.push(JSON.stringify(tuple[2]));
       } else {
-        replacements.push(`"${tuple[2]}"`);
+        replacements.push(tuple[2]);
       }
       return query;
     } else {
