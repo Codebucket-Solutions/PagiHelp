@@ -106,6 +106,10 @@ class PagiHelp {
   ) => {
     let filters = paginationObject.filters;
 
+    if (filters && filters.length > 0 && !Array.isArray(filters[0])) {
+      filters = [filters];
+    }
+
     if (filters && filters.length > 0) {    
       // Function to convert snake_case to camelCase
       const toCamelCase = (str) => {
