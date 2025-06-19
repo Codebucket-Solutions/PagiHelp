@@ -42,7 +42,7 @@ class PagiHelp {
     let field = isExpression ? tuple[0] : SqlString.escapeId(tuple[0]);
     if (tuple[1].toUpperCase() === "JSON_CONTAINS") {
       let query = `${tuple[1]}(${field}, ?)`;
-      if (typeof tuple[2] === "object") {
+      if (tuple[2] && typeof tuple[2] === "object") {
         replacements.push(JSON.stringify(tuple[2]));
       } else {
         replacements.push(tuple[2]);
