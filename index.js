@@ -3,7 +3,7 @@ let rtrim = (str, chr) => {
   return str.replace(rgxtrim, "");
 };
 
-let allowedOperators= ['>','>=','<','<=','=','!=','<>','IN','NOT IN','! IN','IS','IS NOT','LIKE','RLIKE','MEMBER OF','JSON_CONTAINS']
+let allowedOperators= ['>','>=','<','<=','=','!=','<>','IN','NOT IN','! IN','IS','IS NOT','LIKE','RLIKE','MEMBER OF','JSON_CONTAINS','FIND_IN_SET']
 let allowedSorts = ['ASC','DESC']
 let SqlString = require('sqlstring');
 class PagiHelp {
@@ -40,13 +40,18 @@ class PagiHelp {
     }
     const isExpression = tuple[0].trim().startsWith("(");
     let field = isExpression ? tuple[0] : SqlString.escapeId(tuple[0]);
-    if (tuple[1].toUpperCase() === "JSON_CONTAINS") {
+    if (operator === "JSON_CONTAINS") {
       let query = `${tuple[1]}(${field}, ?)`;
       if (tuple[2] && typeof tuple[2] === "object") {
         replacements.push(JSON.stringify(tuple[2]));
       } else {
         replacements.push(tuple[2]);
       }
+      return query;
+    }
+    if (operator === "FIND_IN_SET") {
+      let query = `FIND_IN_SET(?, ${field})`;
+      replacements.push(tuple[2]);
       return query;
     }
     let query = `${field} ${tuple[1]}`;
