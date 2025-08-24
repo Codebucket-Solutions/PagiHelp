@@ -3,7 +3,7 @@ let rtrim = (str, chr) => {
   return str.replace(rgxtrim, "");
 };
 
-let allowedOperators= ['>','>=','<','<=','=','!=','<>','IN','NOT IN','! IN','IS','IS NOT','LIKE','RLIKE','MEMBER OF','JSON_CONTAINS']
+let allowedOperators= ['>','>=','<','<=','=','!=','<>','IN','NOT IN','! IN','IS','IS NOT','LIKE','RLIKE','MEMBER OF','JSON_CONTAINS','FIND_IN_SET']
 let allowedSorts = ['ASC','DESC']
 let SqlString = require('sqlstring');
 class PagiHelp {
@@ -34,45 +34,36 @@ class PagiHelp {
     });
 
   tupleCreator = (tuple, replacements, asItIs = false) => {
-    if(!asItIs&&!allowedOperators.includes(tuple[1].toUpperCase()))
-        throw "Invalid Operator"
-  
-    // Skip escaping if tuple[0] starts with "(" (indicating it's a statement)
-    if (!asItIs && tuple[0].trim().startsWith("(")) {
-      let query = `${tuple[0]}`;
-      if (tuple[1] && tuple[2] !== undefined) {
-          query += ` ${tuple[1]} ?`;
-          replacements.push(tuple[2]);
-      }
-      return query;
+    const operator = tuple[1]?.toUpperCase?.();
+    if (!allowedOperators.includes(operator)) {
+      throw "Invalid Operator";
     }
-
-    // Escape column names only
-    if (!asItIs && !tuple[0].includes(" ") && !tuple[0].includes("(")) {
-      tuple[0] = SqlString.escapeId(tuple[0]);
-    }
-    
-    if(tuple[1].toUpperCase()=='JSON_CONTAINS') {
-      let query = ''
-        query = `${tuple[1]}(${this.columnNameConverter(tuple[0])},?)`;
-        if(tuple[2] && typeof tuple[2]  === 'object')
-          replacements.push(JSON.stringify(tuple[2]));
-        else
-          replacements.push(tuple[2]);
-        return query;
-    } else {
-      let query = `${this.columnNameConverter(tuple[0])} ${tuple[1]}`;
-      if (asItIs) query = `${tuple[0]} ${tuple[1]}`;
-      if (tuple[2] instanceof Array) {
-        query += " (" + "?,".repeat(tuple[2].length).slice(0, -1) + ")";
-        replacements.push(...tuple[2]);
+    const isExpression = tuple[0].trim().startsWith("(");
+    let field = isExpression ? tuple[0] : SqlString.escapeId(tuple[0]);
+    if (operator === "JSON_CONTAINS") {
+      let query = `${tuple[1]}(${field}, ?)`;
+      if (tuple[2] && typeof tuple[2] === "object") {
+        replacements.push(JSON.stringify(tuple[2]));
       } else {
-        query += ` ?`;
         replacements.push(tuple[2]);
       }
       return query;
     }
-    
+    if (operator === "FIND_IN_SET") {
+      let query = `FIND_IN_SET(?, ${field})`;
+      replacements.push(tuple[2]);
+      return query;
+    }
+    let query = `${field} ${tuple[1]}`;
+    if (asItIs) query = `${tuple[0]} ${tuple[1]}`;
+    if (Array.isArray(tuple[2])) {
+      query += " (" + "?,".repeat(tuple[2].length).slice(0, -1) + ")";
+      replacements.push(...tuple[2]);
+    } else {
+      query += " ?";
+      replacements.push(tuple[2]);
+    }
+    return query;
   };
 
   genSchema = (schemaArray, replacements, asItIs = false) => {
@@ -104,6 +95,10 @@ class PagiHelp {
     additionalWhereConditions = []
   ) => {
     let filters = paginationObject.filters;
+
+    if (filters && filters.length > 0 && !Array.isArray(filters[0])) {
+      filters = [filters];
+    }
 
     if (filters && filters.length > 0) {    
       // Function to convert snake_case to camelCase
