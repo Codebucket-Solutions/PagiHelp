@@ -259,6 +259,8 @@ class PagiHelp {
     let replacements = [];
     options = this.filler(options);
 
+    let totalCountQueries = [];
+
     for (let option of options) {
       let queryObject = this.singleTablePagination(
         option.tableName,
@@ -271,13 +273,23 @@ class PagiHelp {
 
       query = query + queryObject.query + " UNION ALL ";
       countQuery = countQuery + queryObject.countQuery + " UNION ALL ";
-      totalCountQuery = totalCountQuery + queryObject.totalCountQuery + " UNION ALL ";
+      totalCountQueries.push(queryObject.totalCountQuery);
       replacements.push(...queryObject.replacements);
     }
 
-    query = rtrim(query, "UNION ALL ");
-    countQuery = rtrim(countQuery, "UNION ALL ");
-    totalCountQuery = rtrim(totalCountQuery, "UNION ALL ");
+    query = query.trim();
+    query = query.replace(/(UNION ALL\s*)$/i, "");
+
+    countQuery = countQuery.trim();
+    countQuery = countQuery.replace(/(UNION ALL\s*)$/i, "");
+
+    if (totalCountQueries.length > 1) {
+        totalCountQuery = `SELECT SUM(countValue) AS countValue FROM ( ${totalCountQueries.join(
+        " UNION ALL "
+        )} ) AS totalCounts`;
+    } else {
+        totalCountQuery = totalCountQueries[0];
+    }
 
     let sort = paginationObject.sort;
     if (sort && Object.keys(sort).length !== 0) {
