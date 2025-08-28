@@ -59,6 +59,12 @@ class PagiHelp {
     if (Array.isArray(tuple[2])) {
       query += " (" + "?,".repeat(tuple[2].length).slice(0, -1) + ")";
       replacements.push(...tuple[2]);
+    } else if (
+      typeof tuple[2] === "string" &&
+      tuple[2].trim().startsWith("(") &&
+      tuple[2].trim().endsWith(")")
+    ) {
+      query += " " + tuple[2];
     } else {
       query += " ?";
       replacements.push(tuple[2]);
