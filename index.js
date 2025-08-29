@@ -74,11 +74,18 @@ class PagiHelp {
               throw "Stacked queries are not allowed in subquery";
           }
       }
+      if (!/^\s*\(\s*SELECT/i.test(subquery)) {
+        throw "Only SELECT subqueries are allowed";
+      }
       const normalized = subquery.replace(/\s+/g, ' ').toUpperCase();
-      if (!normalized.startsWith("(SELECT")) throw "Only SELECT subqueries are allowed";
-      const blacklist = ["DELETE", "DROP", "INSERT", "UPDATE", "TRUNCATE", "ALTER", "--"];
+      const blacklist = ["DELETE", "DROP", "INSERT", "UPDATE", "TRUNCATE", "ALTER"];
       for (const word of blacklist) {
-        if (normalized.includes(word)) throw `Forbidden keyword in subquery: ${word}`;
+        const regex = new RegExp(`\\b${word}\\b`, "i");
+        if (regex.test(normalized)) throw `Forbidden keyword in subquery: ${word}`;
+      }
+      const commentPattern = /--|\/\*/;
+      if (commentPattern.test(subquery)) {
+        throw "Comments are not allowed in subquery";
       }
       query += " " + subquery;
     } else {
