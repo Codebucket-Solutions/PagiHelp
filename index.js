@@ -64,7 +64,30 @@ class PagiHelp {
       tuple[2].trim().startsWith("(") &&
       tuple[2].trim().endsWith(")")
     ) {
-      query += " " + tuple[2];
+      const subquery = tuple[2].trim();
+      let openParens = 0;
+      for (let i = 0; i < subquery.length; i++) {
+          const char = subquery[i];
+          if (char === "(") openParens++;
+          else if (char === ")") openParens--;
+          else if (char === ";" && openParens === 1) {
+              throw "Stacked queries are not allowed in subquery";
+          }
+      }
+      if (!/^\s*\(\s*SELECT/i.test(subquery)) {
+        throw "Only SELECT subqueries are allowed";
+      }
+      const normalized = subquery.replace(/\s+/g, ' ').toUpperCase();
+      const blacklist = ["DELETE", "DROP", "INSERT", "UPDATE", "TRUNCATE", "ALTER"];
+      for (const word of blacklist) {
+        const regex = new RegExp(`\\b${word}\\b`, "i");
+        if (regex.test(normalized)) throw `Forbidden keyword in subquery: ${word}`;
+      }
+      const commentPattern = /--|\/\*/;
+      if (commentPattern.test(subquery)) {
+        throw "Comments are not allowed in subquery";
+      }
+      query += " " + subquery;
     } else {
       query += " ?";
       replacements.push(tuple[2]);
