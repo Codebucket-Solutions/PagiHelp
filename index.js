@@ -34,14 +34,14 @@ class PagiHelp {
     });
 
   tupleCreator = (tuple, replacements, asItIs = false) => {
-    const operator = tuple[1]?.toUpperCase?.();
-    if (!allowedOperators.includes(operator)) {
+    if (!asItIs && (!tuple[1] || !allowedOperators.includes(tuple[1].toUpperCase()))) {
       throw "Invalid Operator";
     }
+    const operator = tuple[1]?.toUpperCase();
     const isExpression = tuple[0].trim().startsWith("(");
     let field = isExpression ? tuple[0] : SqlString.escapeId(tuple[0]);
     if (operator === "JSON_CONTAINS") {
-      let query = `${tuple[1]}(${field}, ?)`;
+      let query = `${operator}(${field}, ?)`;
       if (tuple[2] && typeof tuple[2] === "object") {
         replacements.push(JSON.stringify(tuple[2]));
       } else {
@@ -50,47 +50,32 @@ class PagiHelp {
       return query;
     }
     if (operator === "FIND_IN_SET") {
-      let query = `FIND_IN_SET(?, ${field})`;
       replacements.push(tuple[2]);
-      return query;
+      return `FIND_IN_SET(?, ${field})`;
     }
-    let query = `${field} ${tuple[1]}`;
-    if (asItIs) query = `${tuple[0]} ${tuple[1]}`;
-    if (Array.isArray(tuple[2])) {
-      query += " (" + "?,".repeat(tuple[2].length).slice(0, -1) + ")";
-      replacements.push(...tuple[2]);
-    } else if (
-      typeof tuple[2] === "string" &&
-      tuple[2].trim().startsWith("(") &&
-      tuple[2].trim().endsWith(")")
-    ) {
-      const subquery = tuple[2].trim();
-      let openParens = 0;
-      for (let i = 0; i < subquery.length; i++) {
-          const char = subquery[i];
-          if (char === "(") openParens++;
-          else if (char === ")") openParens--;
-          else if (char === ";" && openParens === 1) {
-              throw "Stacked queries are not allowed in subquery";
-          }
+    let query = `${field} ${operator}`;
+    if (asItIs) {
+      // Raw SQL allowed for additionalWhereConditions
+      if (Array.isArray(tuple[2])) {
+        query += " (" + tuple[2].join(",") + ")";
+      } else if (
+        typeof tuple[2] === "string" &&
+        tuple[2].trim().startsWith("(") &&
+        tuple[2].trim().endsWith(")")
+      ) {
+        query += " " + tuple[2];
+      } else {
+        query += " " + SqlString.escape(tuple[2]);
       }
-      if (!/^\s*\(\s*SELECT/i.test(subquery)) {
-        throw "Only SELECT subqueries are allowed";
-      }
-      const normalized = subquery.replace(/\s+/g, ' ').toUpperCase();
-      const blacklist = ["DELETE", "DROP", "INSERT", "UPDATE", "TRUNCATE", "ALTER"];
-      for (const word of blacklist) {
-        const regex = new RegExp(`\\b${word}\\b`, "i");
-        if (regex.test(normalized)) throw `Forbidden keyword in subquery: ${word}`;
-      }
-      const commentPattern = /--|\/\*/;
-      if (commentPattern.test(subquery)) {
-        throw "Comments are not allowed in subquery";
-      }
-      query += " " + subquery;
     } else {
-      query += " ?";
-      replacements.push(tuple[2]);
+      // Parameterized queries
+      if (Array.isArray(tuple[2])) {
+        query += " (" + "?,".repeat(tuple[2].length).slice(0, -1) + ")";
+        replacements.push(...tuple[2]);
+      } else {
+        query += " ?";
+        replacements.push(tuple[2]);
+      }
     }
     return query;
   };
@@ -107,7 +92,7 @@ class PagiHelp {
       } else {
         let subString = "( ";
         for (let subObject of schemaObject) {
-          subString += this.genSchema(subObject, replacements) + " OR ";
+          subString += this.genSchema(subObject, replacements, asItIs) + " OR ";
         }
         returnString += rtrim(subString, " OR ") + ") AND ";
       }
@@ -129,17 +114,16 @@ class PagiHelp {
       filters = [filters];
     }
 
+    let filterConditions = [];
+
     if (filters && filters.length > 0) {    
       // Function to convert snake_case to camelCase
       const toCamelCase = (str) => {
         return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
       };
     
-      let additionalWhereConditionsForTotalCountQuery = [];
-    
       const processCondition = (condition) => {
         if (Array.isArray(condition[0])) {
-          // If condition[0] is an array, process each sub-condition and group them together
           const nestedConditions = condition.map(subCondition => processCondition(subCondition).flat());
           return [nestedConditions];
         } else {
@@ -166,18 +150,13 @@ class PagiHelp {
           }
     
           return []; // Return an empty array if no column matches
-          }
-        };
-    
-        filters.forEach(condition => {
-          const processedConditions = processCondition(condition);
-          additionalWhereConditionsForTotalCountQuery.push(...processedConditions);
-        });
-    
-        additionalWhereConditions = [
-          ...additionalWhereConditions,
-          ...additionalWhereConditionsForTotalCountQuery,
-        ];
+        }
+      };
+
+      filters.forEach(condition => {
+        const processedConditions = processCondition(condition);
+        filterConditions.push(...processedConditions);
+      });
     }
 
     columnList = this.columNames(columnList);
@@ -207,14 +186,13 @@ class PagiHelp {
       joinQuery;
 
     let replacements = [];
-
     let whereQuery = " WHERE ";
 
     if (additionalWhereConditions.length > 0) {
-      whereQuery =
-        whereQuery +
-        this.genSchema(additionalWhereConditions, replacements, true) +
-        " AND ";
+      whereQuery += this.genSchema(additionalWhereConditions, replacements, true) + " AND ";
+    }
+    if (filterConditions.length > 0) {
+      whereQuery += this.genSchema(filterConditions, replacements, false) + " AND ";
     }
 
     if(searchColumnList && searchColumnList.length>0) {
