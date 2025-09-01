@@ -34,10 +34,10 @@ class PagiHelp {
     });
 
   tupleCreator = (tuple, replacements, asItIs = false) => {
-    if (!asItIs && (!tuple[1] || !allowedOperators.includes(tuple[1].toUpperCase()))) {
+    const operator = tuple[1]?.toUpperCase?.();
+    if (!asItIs && (!operator || !allowedOperators.includes(operator))) {
       throw "Invalid Operator";
     }
-    const operator = tuple[1]?.toUpperCase();
     const isExpression = tuple[0].trim().startsWith("(");
     let field = isExpression ? tuple[0] : SqlString.escapeId(tuple[0]);
     if (operator === "JSON_CONTAINS") {
@@ -50,32 +50,24 @@ class PagiHelp {
       return query;
     }
     if (operator === "FIND_IN_SET") {
+      let query = `FIND_IN_SET(?, ${field})`;
       replacements.push(tuple[2]);
-      return `FIND_IN_SET(?, ${field})`;
+      return query;
     }
     let query = `${field} ${operator}`;
-    if (asItIs) {
-      // Raw SQL allowed for additionalWhereConditions
-      if (Array.isArray(tuple[2])) {
-        query += " (" + tuple[2].join(",") + ")";
-      } else if (
-        typeof tuple[2] === "string" &&
-        tuple[2].trim().startsWith("(") &&
-        tuple[2].trim().endsWith(")")
-      ) {
-        query += " " + tuple[2];
-      } else {
-        query += " " + SqlString.escape(tuple[2]);
-      }
+    if (Array.isArray(tuple[2])) {
+      query += " (" + "?,".repeat(tuple[2].length).slice(0, -1) + ")";
+      replacements.push(...tuple[2]);
+    } else if (
+      asItIs &&
+      typeof tuple[2] === "string" &&
+      tuple[2].trim().startsWith("(") &&
+      tuple[2].trim().endsWith(")")
+    ) {
+      query += " " + tuple[2];
     } else {
-      // Parameterized queries
-      if (Array.isArray(tuple[2])) {
-        query += " (" + "?,".repeat(tuple[2].length).slice(0, -1) + ")";
-        replacements.push(...tuple[2]);
-      } else {
-        query += " ?";
-        replacements.push(tuple[2]);
-      }
+      query += " ?";
+      replacements.push(tuple[2]);
     }
     return query;
   };
@@ -135,6 +127,9 @@ class PagiHelp {
           // Find the column matching the alias
           const column = columnList.find(col => toCamelCase(col.alias) === camelCaseField);
     
+          if (!column) {
+            throw `Invalid filter field: ${field}`;
+          }
           if (column) {
             let fieldName;
     
