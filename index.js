@@ -55,6 +55,7 @@ class PagiHelp {
       return query;
     }
     let query = `${field} ${operator}`;
+    if (asItIs) query = `${tuple[0]} ${tuple[1]}`;
     if (Array.isArray(tuple[2])) {
       query += " (" + "?,".repeat(tuple[2].length).slice(0, -1) + ")";
       replacements.push(...tuple[2]);
