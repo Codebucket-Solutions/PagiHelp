@@ -122,11 +122,12 @@ class PagiHelp {
         } else {
           const [field, operator, value] = condition;
   
-          // Convert field to camelCase
-          const camelCaseField = toCamelCase(field);
-    
           // Find the column matching the alias
-          const column = columnList.find(col => toCamelCase(col.alias) === camelCaseField);
+          let column = columnList.find(col => col.alias === field);
+          if (!column) {
+            const camelCaseField = toCamelCase(field);
+            column = columnList.find(col => toCamelCase(col.alias) === camelCaseField);
+          }
     
           if (!column) {
             throw `Invalid filter field: ${field}`;
