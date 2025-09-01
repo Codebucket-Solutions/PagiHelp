@@ -112,7 +112,9 @@ class PagiHelp {
     if (filters && filters.length > 0) {    
       // Function to convert snake_case to camelCase
       const toCamelCase = (str) => {
-        return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+        return str.replace(/_([a-zA-Z0-9])/g, (_, char) => {
+          return /[a-zA-Z]/.test(char) ? char.toUpperCase() : char;
+        });
       };
     
       const processCondition = (condition) => {
