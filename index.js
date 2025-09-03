@@ -194,7 +194,7 @@ class PagiHelp {
       whereQuery += this.genSchema(filterConditions, replacements, false) + " AND ";
     }
 
-    if(searchColumnList && searchColumnList.length>0) {
+    if(searchColumnList && searchColumnList.length>0 && paginationObject.search !== "") {
       whereQuery = whereQuery + "( ";
       for (let column of searchColumnList) {
       whereQuery = whereQuery + column + " LIKE ? OR ";
