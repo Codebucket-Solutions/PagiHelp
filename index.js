@@ -131,6 +131,14 @@ class PagiHelp {
             column = columnList.find(col => toCamelCase(col.alias) === camelCaseField);
           }
     
+          // if field matches "prefix.name"
+          if (!column && field.includes(".")) {
+            const [prefix, colName] = field.split(".");
+            column = columnList.find(
+              col => col.prefix === prefix && col.name === colName
+            );
+          }
+
           if (!column) {
             throw `Invalid filter field: ${field}`;
           }
