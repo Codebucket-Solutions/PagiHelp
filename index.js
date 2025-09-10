@@ -35,13 +35,13 @@ class PagiHelp {
 
   tupleCreator = (tuple, replacements, asItIs = false) => {
     const operator = tuple[1]?.toUpperCase?.();
-    if (!allowedOperators.includes(operator)) {
+    if (!asItIs && (!operator || !allowedOperators.includes(operator))) {
       throw "Invalid Operator";
     }
     const isExpression = tuple[0].trim().startsWith("(");
     let field = isExpression ? tuple[0] : SqlString.escapeId(tuple[0]);
     if (operator === "JSON_CONTAINS") {
-      let query = `${tuple[1]}(${field}, ?)`;
+      let query = `${operator}(${field}, ?)`;
       if (tuple[2] && typeof tuple[2] === "object") {
         replacements.push(JSON.stringify(tuple[2]));
       } else {
@@ -54,12 +54,13 @@ class PagiHelp {
       replacements.push(tuple[2]);
       return query;
     }
-    let query = `${field} ${tuple[1]}`;
+    let query = `${field} ${operator}`;
     if (asItIs) query = `${tuple[0]} ${tuple[1]}`;
     if (Array.isArray(tuple[2])) {
       query += " (" + "?,".repeat(tuple[2].length).slice(0, -1) + ")";
       replacements.push(...tuple[2]);
     } else if (
+      asItIs &&
       typeof tuple[2] === "string" &&
       tuple[2].trim().startsWith("(") &&
       tuple[2].trim().endsWith(")")
@@ -84,7 +85,7 @@ class PagiHelp {
       } else {
         let subString = "( ";
         for (let subObject of schemaObject) {
-          subString += this.genSchema(subObject, replacements) + " OR ";
+          subString += this.genSchema(subObject, replacements, asItIs) + " OR ";
         }
         returnString += rtrim(subString, " OR ") + ") AND ";
       }
@@ -106,28 +107,41 @@ class PagiHelp {
       filters = [filters];
     }
 
+    let filterConditions = [];
+
     if (filters && filters.length > 0) {    
       // Function to convert snake_case to camelCase
       const toCamelCase = (str) => {
-        return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+        return str.replace(/_([a-zA-Z0-9])/g, (_, char) => {
+          return /[a-zA-Z]/.test(char) ? char.toUpperCase() : char;
+        });
       };
-    
-      let additionalWhereConditionsForTotalCountQuery = [];
     
       const processCondition = (condition) => {
         if (Array.isArray(condition[0])) {
-          // If condition[0] is an array, process each sub-condition and group them together
           const nestedConditions = condition.map(subCondition => processCondition(subCondition).flat());
           return [nestedConditions];
         } else {
           const [field, operator, value] = condition;
   
-          // Convert field to camelCase
-          const camelCaseField = toCamelCase(field);
-    
           // Find the column matching the alias
-          const column = columnList.find(col => toCamelCase(col.alias) === camelCaseField);
+          let column = columnList.find(col => col.alias === field);
+          if (!column) {
+            const camelCaseField = toCamelCase(field);
+            column = columnList.find(col => toCamelCase(col.alias) === camelCaseField);
+          }
     
+          // if field matches "prefix.name"
+          if (!column && field.includes(".")) {
+            const [prefix, colName] = field.split(".");
+            column = columnList.find(
+              col => col.prefix === prefix && col.name === colName
+            );
+          }
+
+          if (!column) {
+            throw `Invalid filter field: ${field}`;
+          }
           if (column) {
             let fieldName;
     
@@ -143,18 +157,13 @@ class PagiHelp {
           }
     
           return []; // Return an empty array if no column matches
-          }
-        };
-    
-        filters.forEach(condition => {
-          const processedConditions = processCondition(condition);
-          additionalWhereConditionsForTotalCountQuery.push(...processedConditions);
-        });
-    
-        additionalWhereConditions = [
-          ...additionalWhereConditions,
-          ...additionalWhereConditionsForTotalCountQuery,
-        ];
+        }
+      };
+
+      filters.forEach(condition => {
+        const processedConditions = processCondition(condition);
+        filterConditions.push(...processedConditions);
+      });
     }
 
     columnList = this.columNames(columnList);
@@ -184,17 +193,16 @@ class PagiHelp {
       joinQuery;
 
     let replacements = [];
-
     let whereQuery = " WHERE ";
 
     if (additionalWhereConditions.length > 0) {
-      whereQuery =
-        whereQuery +
-        this.genSchema(additionalWhereConditions, replacements, true) +
-        " AND ";
+      whereQuery += this.genSchema(additionalWhereConditions, replacements, true) + " AND ";
+    }
+    if (filterConditions.length > 0) {
+      whereQuery += this.genSchema(filterConditions, replacements, false) + " AND ";
     }
 
-    if(searchColumnList && searchColumnList.length>0) {
+    if(searchColumnList && searchColumnList.length>0 && paginationObject.search !== "") {
       whereQuery = whereQuery + "( ";
       for (let column of searchColumnList) {
       whereQuery = whereQuery + column + " LIKE ? OR ";
