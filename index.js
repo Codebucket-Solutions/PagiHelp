@@ -3,7 +3,7 @@ let rtrim = (str, chr) => {
   return str.replace(rgxtrim, "");
 };
 
-let allowedOperators= ['>','>=','<','<=','=','!=','<>','IN','NOT IN','! IN','IS','IS NOT','LIKE','RLIKE','MEMBER OF','JSON_CONTAINS','FIND_IN_SET']
+let allowedOperators= ['>','>=','<','<=','=','!=','<>','IN','NOT IN','! IN','IS','IS NOT','LIKE','RLIKE','MEMBER OF','JSON_CONTAINS', 'JSON_OVERLAPS', 'FIND_IN_SET']
 let allowedSorts = ['ASC','DESC']
 let SqlString = require('sqlstring');
 class PagiHelp {
@@ -38,9 +38,8 @@ class PagiHelp {
     if (!asItIs && (!operator || !allowedOperators.includes(operator))) {
       throw "Invalid Operator";
     }
-    const isExpression = tuple[0].trim().startsWith("(");
-    let field = isExpression ? tuple[0] : SqlString.escapeId(tuple[0]);
-    if (operator === "JSON_CONTAINS") {
+    let field = tuple[0];
+    if (operator === "JSON_CONTAINS" || operator === "JSON_OVERLAPS") {
       let query = `${operator}(${field}, ?)`;
       if (tuple[2] && typeof tuple[2] === "object") {
         replacements.push(JSON.stringify(tuple[2]));
