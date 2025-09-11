@@ -38,8 +38,7 @@ class PagiHelp {
     if (!asItIs && (!operator || !allowedOperators.includes(operator))) {
       throw "Invalid Operator";
     }
-    const isExpression = tuple[0].includes("(") && tuple[0].includes(")");
-    let field = isExpression ? tuple[0] : SqlString.escapeId(tuple[0]);
+    let field = tuple[0];
     if (operator === "JSON_CONTAINS" || operator === "JSON_OVERLAPS") {
       let query = `${operator}(${field}, ?)`;
       if (tuple[2] && typeof tuple[2] === "object") {
