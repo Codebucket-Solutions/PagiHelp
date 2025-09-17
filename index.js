@@ -82,7 +82,7 @@ class PagiHelp {
         returnString +=
           this.tupleCreator(schemaObject, replacements, asItIs) + " AND ";
       } else {
-        let subString = "( ";
+        let subString = "(";
         for (let subObject of schemaObject) {
           subString += this.genSchema(subObject, replacements, asItIs) + " OR ";
         }
@@ -184,7 +184,7 @@ class PagiHelp {
       "`" +
       joinQuery;
 
-      let totalCountQuery =
+    let totalCountQuery =
       "SELECT COUNT(*) AS countValue " +
       " FROM `" +
       tableName +
@@ -202,17 +202,14 @@ class PagiHelp {
     }
 
     if(searchColumnList && searchColumnList.length > 0 && paginationObject.search !== "") {
-      whereQuery += (whereQuery === "" ? " WHERE " : " AND ") + "( ";
+      whereQuery += (whereQuery === "" ? " WHERE " : " AND ") + "(";
       for (let column of searchColumnList) {
-      whereQuery += column + " LIKE ? OR ";
-      replacements.push(`%${paginationObject.search}%`);
+        whereQuery += column + " LIKE ? OR ";
+        replacements.push(`%${paginationObject.search}%`);
       }
-      whereQuery = rtrim(whereQuery, "OR ");
-      whereQuery += " )";
+      whereQuery = whereQuery.replace(/\s*(AND|OR)\s*$/i, "");
+      whereQuery += ")";
     }
-    
-    whereQuery = rtrim(whereQuery, "AND ");
-    whereQuery = rtrim(whereQuery, "OR ");
 
     query = query + whereQuery;
     countQuery = countQuery + whereQuery;
