@@ -192,27 +192,27 @@ class PagiHelp {
       joinQuery;
 
     let replacements = [];
-    let whereQuery = " WHERE ";
+    let whereQuery = "";
 
     if (additionalWhereConditions.length > 0) {
-      whereQuery += this.genSchema(additionalWhereConditions, replacements, true) + " AND ";
+      whereQuery += (whereQuery === "" ? " WHERE " : " AND ") + this.genSchema(additionalWhereConditions, replacements, true);
     }
     if (filterConditions.length > 0) {
-      whereQuery += this.genSchema(filterConditions, replacements, false) + " AND ";
+      whereQuery += (whereQuery === "" ? " WHERE " : " AND ") + this.genSchema(filterConditions, replacements, false);
     }
 
-    if(searchColumnList && searchColumnList.length>0 && paginationObject.search !== "") {
-      whereQuery = whereQuery + "( ";
+    if(searchColumnList && searchColumnList.length > 0 && paginationObject.search !== "") {
+      whereQuery += (whereQuery === "" ? " WHERE " : " AND ") + "( ";
       for (let column of searchColumnList) {
-      whereQuery = whereQuery + column + " LIKE ? OR ";
+      whereQuery += column + " LIKE ? OR ";
       replacements.push(`%${paginationObject.search}%`);
       }
       whereQuery = rtrim(whereQuery, "OR ");
-      whereQuery = whereQuery + " )";
-    } else {
-      whereQuery = rtrim(whereQuery, "AND ");
+      whereQuery += " )";
     }
     
+    whereQuery = rtrim(whereQuery, "AND ");
+    whereQuery = rtrim(whereQuery, "OR ");
 
     query = query + whereQuery;
     countQuery = countQuery + whereQuery;
