@@ -302,11 +302,12 @@ class PagiHelp {
     }
 
     let sort = paginationObject.sort;
-    if (sort && Object.keys(sort).length !== 0) {
-      for(let i = 0; i < sort.sorts.length; i++) {
-        if(!allowedSorts.includes(sort.sorts[i].toUpperCase())) 
-            throw "INVALID SORT VALUE";
-        sort.sorts[i] = sort.sorts[i].toUpperCase()
+    let hasSortQuery = options.some(opt => opt.sortQuery);
+    if (!hasSortQuery && sort && Object.keys(sort).length !== 0) {
+      for (let i = 0; i < sort.sorts.length; i++) {
+        if (!allowedSorts.includes(sort.sorts[i].toUpperCase()))
+          throw "INVALID SORT VALUE";
+        sort.sorts[i] = sort.sorts[i].toUpperCase();
       }
       for (let i = 0; i < sort.attributes.length; i++) {
         let attr = sort.attributes[i];
@@ -330,6 +331,13 @@ class PagiHelp {
       }
       orderByQuery = rtrim(orderByQuery, ",");
       query = query + orderByQuery;
+    }
+
+    for (let option of options) {
+      if (option.sortQuery) {
+        query = query + " " + option.sortQuery.trim();
+        break;
+      }
     }
 
     if (paginationObject.pageNo && paginationObject.itemsPerPage) {
