@@ -16,6 +16,12 @@ class PagiHelp {
 
   columnNameConverter = (x) => x;
 
+  toCamelCase = (str) => {
+    return str.replace(/_([a-zA-Z0-9])/g, (_, char) => {
+      return /[a-zA-Z]/.test(char) ? char.toUpperCase() : char;
+    });
+  };
+
   columNames = (arr) =>
     arr.map((a) => {
       if (a.prefix) {
@@ -109,12 +115,6 @@ class PagiHelp {
     let filterConditions = [];
 
     if (filters && filters.length > 0) {    
-      // Function to convert snake_case to camelCase
-      const toCamelCase = (str) => {
-        return str.replace(/_([a-zA-Z0-9])/g, (_, char) => {
-          return /[a-zA-Z]/.test(char) ? char.toUpperCase() : char;
-        });
-      };
     
       const processCondition = (condition) => {
         if (Array.isArray(condition[0])) {
@@ -126,8 +126,8 @@ class PagiHelp {
           // Find the column matching the alias
           let column = columnList.find(col => col.alias === field);
           if (!column) {
-            const camelCaseField = toCamelCase(field);
-            column = columnList.find(col => toCamelCase(col.alias) === camelCaseField);
+            const camelCaseField = this.toCamelCase(field);
+            column = columnList.find(col => this.toCamelCase(col.alias) === camelCaseField);
           }
     
           // if field matches "prefix.name"
@@ -309,13 +309,24 @@ class PagiHelp {
         sort.sorts[i] = sort.sorts[i].toUpperCase()
       }
       for (let i = 0; i < sort.attributes.length; i++) {
-        orderByQuery =
-          orderByQuery +
-          "" +
-          this.columnNameConverter(SqlString.escapeId(sort.attributes[i])) +
-          "" +
-          sort.sorts[i] +
-          ",";
+        let attr = sort.attributes[i];
+        let aliasMatch = null;
+        for (let option of options) {
+          let found = option.columnList.find(col => col.alias === attr);
+          if (!found) {
+            const camelCaseAttr = this.toCamelCase(attr);
+            found = option.columnList.find(col => this.toCamelCase(col.alias) === camelCaseAttr);
+          }
+          if (found) {
+            aliasMatch = found.alias;
+            break;
+          }
+        }
+        if (aliasMatch) {
+          orderByQuery += `${aliasMatch} ${sort.sorts[i]},`;
+        } else {
+          orderByQuery += this.columnNameConverter(SqlString.escapeId(attr)) + " " + sort.sorts[i] +  ",";
+        }
       }
       orderByQuery = rtrim(orderByQuery, ",");
       query = query + orderByQuery;
