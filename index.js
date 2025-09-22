@@ -16,6 +16,12 @@ class PagiHelp {
 
   columnNameConverter = (x) => x;
 
+  toCamelCase = (str) => {
+    return str.replace(/_([a-zA-Z0-9])/g, (_, char) => {
+      return /[a-zA-Z]/.test(char) ? char.toUpperCase() : char;
+    });
+  };
+
   columNames = (arr) =>
     arr.map((a) => {
       if (a.prefix) {
@@ -82,7 +88,7 @@ class PagiHelp {
         returnString +=
           this.tupleCreator(schemaObject, replacements, asItIs) + " AND ";
       } else {
-        let subString = "( ";
+        let subString = "(";
         for (let subObject of schemaObject) {
           subString += this.genSchema(subObject, replacements, asItIs) + " OR ";
         }
@@ -109,12 +115,6 @@ class PagiHelp {
     let filterConditions = [];
 
     if (filters && filters.length > 0) {    
-      // Function to convert snake_case to camelCase
-      const toCamelCase = (str) => {
-        return str.replace(/_([a-zA-Z0-9])/g, (_, char) => {
-          return /[a-zA-Z]/.test(char) ? char.toUpperCase() : char;
-        });
-      };
     
       const processCondition = (condition) => {
         if (Array.isArray(condition[0])) {
@@ -126,8 +126,8 @@ class PagiHelp {
           // Find the column matching the alias
           let column = columnList.find(col => col.alias === field);
           if (!column) {
-            const camelCaseField = toCamelCase(field);
-            column = columnList.find(col => toCamelCase(col.alias) === camelCaseField);
+            const camelCaseField = this.toCamelCase(field);
+            column = columnList.find(col => this.toCamelCase(col.alias) === camelCaseField);
           }
     
           // if field matches "prefix.name"
@@ -184,7 +184,7 @@ class PagiHelp {
       "`" +
       joinQuery;
 
-      let totalCountQuery =
+    let totalCountQuery =
       "SELECT COUNT(*) AS countValue " +
       " FROM `" +
       tableName +
@@ -192,27 +192,24 @@ class PagiHelp {
       joinQuery;
 
     let replacements = [];
-    let whereQuery = " WHERE ";
+    let whereQuery = "";
 
     if (additionalWhereConditions.length > 0) {
-      whereQuery += this.genSchema(additionalWhereConditions, replacements, true) + " AND ";
+      whereQuery += (whereQuery === "" ? " WHERE " : " AND ") + this.genSchema(additionalWhereConditions, replacements, true);
     }
     if (filterConditions.length > 0) {
-      whereQuery += this.genSchema(filterConditions, replacements, false) + " AND ";
+      whereQuery += (whereQuery === "" ? " WHERE " : " AND ") + this.genSchema(filterConditions, replacements, false);
     }
 
-    if(searchColumnList && searchColumnList.length>0 && paginationObject.search !== "") {
-      whereQuery = whereQuery + "( ";
+    if(searchColumnList && searchColumnList.length > 0 && paginationObject.search !== "") {
+      whereQuery += (whereQuery === "" ? " WHERE " : " AND ") + "(";
       for (let column of searchColumnList) {
-      whereQuery = whereQuery + column + " LIKE ? OR ";
-      replacements.push(`%${paginationObject.search}%`);
+        whereQuery += column + " LIKE ? OR ";
+        replacements.push(`%${paginationObject.search}%`);
       }
-      whereQuery = rtrim(whereQuery, "OR ");
-      whereQuery = whereQuery + " )";
-    } else {
-      whereQuery = rtrim(whereQuery, "AND ");
+      whereQuery = whereQuery.replace(/\s*(AND|OR)\s*$/i, "");
+      whereQuery += ")";
     }
-    
 
     query = query + whereQuery;
     countQuery = countQuery + whereQuery;
@@ -305,23 +302,42 @@ class PagiHelp {
     }
 
     let sort = paginationObject.sort;
-    if (sort && Object.keys(sort).length !== 0) {
-      for(let i = 0; i < sort.sorts.length; i++) {
-        if(!allowedSorts.includes(sort.sorts[i].toUpperCase())) 
-            throw "INVALID SORT VALUE";
-        sort.sorts[i] = sort.sorts[i].toUpperCase()
+    let hasSortQuery = options.some(opt => opt.sortQuery);
+    if (!hasSortQuery && sort && Object.keys(sort).length !== 0) {
+      for (let i = 0; i < sort.sorts.length; i++) {
+        if (!allowedSorts.includes(sort.sorts[i].toUpperCase()))
+          throw "INVALID SORT VALUE";
+        sort.sorts[i] = sort.sorts[i].toUpperCase();
       }
       for (let i = 0; i < sort.attributes.length; i++) {
-        orderByQuery =
-          orderByQuery +
-          "" +
-          this.columnNameConverter(SqlString.escapeId(sort.attributes[i])) +
-          "" +
-          sort.sorts[i] +
-          ",";
+        let attr = sort.attributes[i];
+        let aliasMatch = null;
+        for (let option of options) {
+          let found = option.columnList.find(col => col.alias === attr);
+          if (!found) {
+            const camelCaseAttr = this.toCamelCase(attr);
+            found = option.columnList.find(col => this.toCamelCase(col.alias) === camelCaseAttr);
+          }
+          if (found) {
+            aliasMatch = found.alias;
+            break;
+          }
+        }
+        if (aliasMatch) {
+          orderByQuery += `${aliasMatch} ${sort.sorts[i]},`;
+        } else {
+          orderByQuery += this.columnNameConverter(SqlString.escapeId(attr)) + " " + sort.sorts[i] +  ",";
+        }
       }
       orderByQuery = rtrim(orderByQuery, ",");
       query = query + orderByQuery;
+    }
+
+    for (let option of options) {
+      if (option.sortQuery) {
+        query = query + " " + option.sortQuery.trim();
+        break;
+      }
     }
 
     if (paginationObject.pageNo && paginationObject.itemsPerPage) {
