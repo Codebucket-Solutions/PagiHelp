@@ -32,15 +32,15 @@ class PagiHelp {
       if (a.prefix) {
         if (a.alias)
           return (
-            this.escapeIdentifier(a.prefix) + "." + this.escapeIdentifier(this.columnNameConverter(a.name)) + " AS " + a.alias
+            this.escapeIdentifier(a.prefix) + "." + this.escapeIdentifier(this.columnNameConverter(a.name)) + " AS " + this.escapeIdentifier(a.alias)
           );
         return this.escapeIdentifier(a.prefix) + "." + this.escapeIdentifier(this.columnNameConverter(a.name));
       }
       if (a.statement) {
-        if (a.alias) return a.statement + " AS " + a.alias;
+        if (a.alias) return a.statement + " AS " + this.escapeIdentifier(a.alias);
         return a.statement;
       }
-      if (a.alias) return this.escapeIdentifier(this.columnNameConverter(a.name)) + " AS " + a.alias;
+      if (a.alias) return this.escapeIdentifier(this.columnNameConverter(a.name)) + " AS " + this.escapeIdentifier(a.alias);
       return this.escapeIdentifier(this.columnNameConverter(a.name));
     });
 
