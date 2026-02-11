@@ -327,28 +327,6 @@ class PagiHelp {
       }
       for (let i = 0; i < sort.attributes.length; i++) {
         const sortAttr = sort.attributes[i];
-        let isValidColumn = false;
-
-        const toCamelCase = (str) => {
-          return str.replace(/_([a-zA-Z0-9])/g, (_, char) => {
-            return /[a-zA-Z]/.test(char) ? char.toUpperCase() : char;
-          });
-        };
-
-        for (let option of options) {
-          const cols = option.columnList || [{ name: "*" }];
-          isValidColumn = cols.some(col => {
-            if (col.alias === sortAttr || col.name === sortAttr) return true;
-            if (col.alias && toCamelCase(col.alias) === toCamelCase(sortAttr)) return true;
-            if (col.prefix && `${col.prefix}.${col.name}` === sortAttr) return true;
-            return false;
-          });
-          if (isValidColumn) break;
-        }
-
-        if (sortAttr !== "id" && !isValidColumn) {
-          throw `Invalid sort attribute: ${sortAttr}`;
-        }
 
         let orderByPart;
         if (sortAttr.includes(".")) {
