@@ -200,7 +200,7 @@ class PagiHelp {
       joinQuery;
 
       let totalCountQuery =
-      "SELECT COUNT(*) AS countValue " +
+      "SELECT COUNT(*) AS " + this.escapeIdentifier("countValue") + " " +
       " FROM " +
       this.escapeIdentifier(tableName) +
       joinQuery;
@@ -311,9 +311,9 @@ class PagiHelp {
     countQuery = countQuery.replace(/(UNION ALL\s*)$/i, "");
 
     if (totalCountQueries.length > 1) {
-        totalCountQuery = `SELECT SUM(countValue) AS countValue FROM ( ${totalCountQueries.join(
+        totalCountQuery = `SELECT SUM(${this.escapeIdentifier("countValue")}) AS ${this.escapeIdentifier("countValue")} FROM ( ${totalCountQueries.join(
         " UNION ALL "
-        )} ) AS totalCounts`;
+        )} ) AS ${this.escapeIdentifier("totalCounts")}`;
     } else {
         totalCountQuery = totalCountQueries[0];
     }
@@ -350,10 +350,18 @@ class PagiHelp {
           throw `Invalid sort attribute: ${sortAttr}`;
         }
 
+        let orderByPart;
+        if (sortAttr.includes(".")) {
+          const [prefix, colName] = sortAttr.split(".");
+          orderByPart = `${this.escapeIdentifier(prefix)}.${this.escapeIdentifier(this.columnNameConverter(colName))}`;
+        } else {
+          orderByPart = this.escapeIdentifier(this.columnNameConverter(sortAttr));
+        }
+
         orderByQuery =
           orderByQuery +
           "" +
-          this.escapeIdentifier(this.columnNameConverter(sortAttr)) +
+          orderByPart +
           " " +
           sort.sorts[i] +
           ",";
