@@ -352,11 +352,21 @@ class PagiHelp {
       let offset =
         (paginationObject.pageNo - 1) * paginationObject.itemsPerPage;
 
-      query = query + " LIMIT ?,?";
-      replacements.push(offset, paginationObject.itemsPerPage);
+      if (this.dialect === "postgresql") {
+        query = query + " LIMIT ? OFFSET ?";
+        replacements.push(paginationObject.itemsPerPage, offset);
+      } else {
+        query = query + " LIMIT ?,?";
+        replacements.push(offset, paginationObject.itemsPerPage);
+      }
     } else if(paginationObject.offset && paginationObject.limit ) {
-      query = query + " LIMIT ?,?";
-      replacements.push(paginationObject.offset,paginationObject.limit)
+      if (this.dialect === "postgresql") {
+        query = query + " LIMIT ? OFFSET ?";
+        replacements.push(paginationObject.limit, paginationObject.offset);
+      } else {
+        query = query + " LIMIT ?,?";
+        replacements.push(paginationObject.offset, paginationObject.limit);
+      }
     }
 
     return {
