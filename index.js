@@ -22,9 +22,9 @@ class PagiHelp {
 
   escapeIdentifier = (identifier) => {
     if (this.dialect === "postgresql") {
-      return `"${identifier}"`;
+      return `"${identifier.replace(/"/g, '""')}"`;
     }
-    return `\`${identifier}\``;
+    return `\`${identifier.replace(/`/g, '``')}\``;
   };
 
   columNames = (arr) =>
@@ -353,7 +353,7 @@ class PagiHelp {
         orderByQuery =
           orderByQuery +
           "" +
-          this.columnNameConverter(this.escapeIdentifier(sortAttr)) +
+          this.escapeIdentifier(this.columnNameConverter(sortAttr)) +
           " " +
           sort.sorts[i] +
           ",";
