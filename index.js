@@ -9,28 +9,39 @@ let SqlString = require('sqlstring');
 class PagiHelp {
   constructor(options) {
     if(options) {
-        let { columnNameConverter } = options;
+        let { columnNameConverter, dialect } = options;
         if (columnNameConverter) this.columnNameConverter = columnNameConverter;
+        this.dialect = dialect || "mysql";
+    } else {
+        this.dialect = "mysql";
     }
   }
 
   columnNameConverter = (x) => x;
+  dialect = "mysql";
+
+  escapeIdentifier = (identifier) => {
+    if (this.dialect === "postgresql") {
+      return `"${identifier}"`;
+    }
+    return `\`${identifier}\``;
+  };
 
   columNames = (arr) =>
     arr.map((a) => {
       if (a.prefix) {
         if (a.alias)
           return (
-            a.prefix + "." + this.columnNameConverter(a.name) + " AS " + a.alias
+            this.escapeIdentifier(a.prefix) + "." + this.escapeIdentifier(this.columnNameConverter(a.name)) + " AS " + a.alias
           );
-        return a.prefix + "." + this.columnNameConverter(a.name);
+        return this.escapeIdentifier(a.prefix) + "." + this.escapeIdentifier(this.columnNameConverter(a.name));
       }
       if (a.statement) {
         if (a.alias) return a.statement + " AS " + a.alias;
         return a.statement;
       }
-      if (a.alias) return this.columnNameConverter(a.name) + " AS " + a.alias;
-      return this.columnNameConverter(a.name);
+      if (a.alias) return this.escapeIdentifier(this.columnNameConverter(a.name)) + " AS " + a.alias;
+      return this.escapeIdentifier(this.columnNameConverter(a.name));
     });
 
   tupleCreator = (tuple, replacements, asItIs = false) => {
@@ -40,6 +51,9 @@ class PagiHelp {
     }
     let field = tuple[0];
     if (operator === "JSON_CONTAINS" || operator === "JSON_OVERLAPS") {
+      if (this.dialect === "postgresql") {
+        throw `${operator} is not supported in PostgreSQL. Use JSONB operators instead.`;
+      }
       let query = `${operator}(${field}, ?)`;
       if (tuple[2] && typeof tuple[2] === "object") {
         replacements.push(JSON.stringify(tuple[2]));
@@ -49,6 +63,9 @@ class PagiHelp {
       return query;
     }
     if (operator === "FIND_IN_SET") {
+      if (this.dialect === "postgresql") {
+        throw "FIND_IN_SET is not supported in PostgreSQL. Use ANY/array operators instead.";
+      }
       let query = `FIND_IN_SET(?, ${field})`;
       replacements.push(tuple[2]);
       return query;
@@ -147,9 +164,9 @@ class PagiHelp {
             if (column.statement) {
               fieldName = column.statement;
             } else if (column.prefix) {
-              fieldName = `${column.prefix}.${column.name}`;
+              fieldName = `${this.escapeIdentifier(column.prefix)}.${this.escapeIdentifier(column.name)}`;
             } else {
-              fieldName = column.name;
+              fieldName = this.escapeIdentifier(column.name);
             }
     
             return [[fieldName, operator, value]];
@@ -171,24 +188,21 @@ class PagiHelp {
     let query =
       "SELECT " +
       columnList.join(",") +
-      " FROM `" +
-      tableName +
-      "`" +
+      " FROM " +
+      this.escapeIdentifier(tableName) +
       joinQuery;
 
     let countQuery =
       "SELECT " +
       columnList.join(",") +
-      " FROM `" +
-      tableName +
-      "`" +
+      " FROM " +
+      this.escapeIdentifier(tableName) +
       joinQuery;
 
       let totalCountQuery =
       "SELECT COUNT(*) AS countValue " +
-      " FROM `" +
-      tableName +
-      "`" +
+      " FROM " +
+      this.escapeIdentifier(tableName) +
       joinQuery;
 
     let replacements = [];
@@ -315,8 +329,8 @@ class PagiHelp {
         orderByQuery =
           orderByQuery +
           "" +
-          this.columnNameConverter(SqlString.escapeId(sort.attributes[i])) +
-          "" +
+          this.columnNameConverter(this.escapeIdentifier(sort.attributes[i])) +
+          " " +
           sort.sorts[i] +
           ",";
       }
