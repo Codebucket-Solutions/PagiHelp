@@ -52,7 +52,7 @@ class PagiHelp {
     let field = tuple[0];
     if (operator === "JSON_CONTAINS" || operator === "JSON_OVERLAPS") {
       if (this.dialect === "postgresql") {
-        throw `${operator} is not supported in PostgreSQL. Use JSONB operators instead.`;
+        throw `${operator} is not supported in PostgreSQL.`;
       }
       let query = `${operator}(${field}, ?)`;
       if (tuple[2] && typeof tuple[2] === "object") {
@@ -64,7 +64,7 @@ class PagiHelp {
     }
     if (operator === "FIND_IN_SET") {
       if (this.dialect === "postgresql") {
-        throw "FIND_IN_SET is not supported in PostgreSQL. Use ANY/array operators instead.";
+        throw "FIND_IN_SET is not supported in PostgreSQL.";
       }
       let query = `FIND_IN_SET(?, ${field})`;
       replacements.push(tuple[2]);
@@ -326,10 +326,26 @@ class PagiHelp {
         sort.sorts[i] = sort.sorts[i].toUpperCase()
       }
       for (let i = 0; i < sort.attributes.length; i++) {
+        const sortAttr = sort.attributes[i];
+        let isValidColumn = false;
+        for (let option of options) {
+          const cols = option.columnList || [{ name: "*" }];
+          isValidColumn = cols.some(col => 
+            col.alias === sortAttr || 
+            col.name === sortAttr ||
+            (col.prefix && `${col.prefix}.${col.name}` === sortAttr)
+          );
+          if (isValidColumn) break;
+        }
+
+        if (sortAttr !== "id" && !isValidColumn) {
+          throw `Invalid sort attribute: ${sortAttr}`;
+        }
+
         orderByQuery =
           orderByQuery +
           "" +
-          this.columnNameConverter(this.escapeIdentifier(sort.attributes[i])) +
+          this.columnNameConverter(this.escapeIdentifier(sortAttr)) +
           " " +
           sort.sorts[i] +
           ",";
