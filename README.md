@@ -1,6 +1,6 @@
 # PagiHelp
 
-`pagi-help@2.4.0` ships two APIs from one package.
+`pagi-help@2.4.1` ships two APIs from one package.
 
 - `require("pagi-help")` keeps the frozen legacy MySQL contract.
 - `require("pagi-help/v2")` is the current hardened API for new code.
@@ -127,20 +127,20 @@ const queries = pagiHelp.paginate(
   },
   [
     {
-      tableName: "licenses",
+      tableName: "audit.licenses",
       columnList: [
-        { name: "license_id", prefix: "l", alias: "id" },
-        { name: "created_at", prefix: "l", alias: "createdAt" },
-        { name: "meta_info", prefix: "l", alias: "metaInfo" },
-        { name: "tags", prefix: "l", alias: "tags" },
+        { name: "license_id", alias: "id" },
+        { name: "created_at", alias: "createdAt" },
+        { name: "meta_info", alias: "metaInfo" },
+        { name: "tags", alias: "tags" },
         {
           statement:
-            "(CASE WHEN l.assigned_to = '1' THEN 'Yes' ELSE 'No' END)",
+            "(CASE WHEN audit.licenses.assigned_to = '1' THEN 'Yes' ELSE 'No' END)",
           alias: "assignedToMe",
         },
       ],
-      searchColumnList: [{ name: "created_at", prefix: "l" }],
-      joinQuery: "l",
+      searchColumnList: [{ name: "created_at" }],
+      additionalWhereConditions: [["audit.licenses.organization_id", "=", 42]],
     },
   ]
 );
@@ -155,6 +155,13 @@ LIMIT ? OFFSET ?
 Replacements are `[limit, offset]`.
 
 Use PostgreSQL SQL inside `statement`, `joinQuery`, and raw `additionalWhereConditions`. Do not reuse MySQL-only functions like `IF()` there.
+
+Schema-qualified PostgreSQL names are supported on `v2`:
+
+- `tableName: "audit.licenses"` renders `FROM "audit"."licenses"`
+- if you want an alias, keep it in `joinQuery`, not inside `tableName`
+- raw `additionalWhereConditions` can use fully-qualified fields like `"audit.licenses.organization_id"`
+- regular filters still resolve by alias or `prefix.column`, not by `schema.table.column`
 
 ## Return Shape
 

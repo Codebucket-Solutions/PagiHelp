@@ -229,6 +229,40 @@ test("v2 postgres uses LIMIT/OFFSET for direct offset pagination too", () => {
   assert.deepStrictEqual(result.replacements, [7, 3]);
 });
 
+test("v2 postgres quotes schema-qualified table names correctly", () => {
+  const pagiHelp = new PagiHelpV210({
+    dialect: "postgres",
+  });
+
+  const result = runQuietly(() =>
+    pagiHelp.paginate(
+      {
+        search: "",
+        pageNo: 1,
+        itemsPerPage: 5,
+      },
+      [
+        {
+          tableName: "audit.events",
+          columnList: [
+            { name: "id", alias: "id" },
+            { name: "event_name", alias: "eventName" },
+          ],
+          searchColumnList: [{ name: "event_name" }],
+        },
+      ]
+    )
+  );
+
+  assert.deepStrictEqual(result, {
+    countQuery: 'SELECT COUNT(*) AS countValue  FROM "audit"."events"',
+    totalCountQuery: 'SELECT COUNT(*) AS countValue  FROM "audit"."events"',
+    query:
+      'SELECT id AS id,event_name AS eventName FROM "audit"."events" LIMIT ? OFFSET ?',
+    replacements: [5, 0],
+  });
+});
+
 test("v2 postgres normalizes joinQuery and omits empty WHERE clauses", () => {
   const pagiHelp = new PagiHelpV210({
     dialect: "postgres",
@@ -349,6 +383,43 @@ test("v2 postgres supports dotted search columns and raw additionalWhereConditio
     query:
       'SELECT xg.id AS id,xg.group_name AS groupName FROM "xcommunity_groups" xg WHERE xg.status != ? AND (xg.group_name = ?) AND ( xg.group_name LIKE ? ) LIMIT ? OFFSET ?',
     replacements: ["Deleted", "VIP", "%group%", 3, 0],
+  });
+});
+
+test("v2 postgres allows schema.table.column in raw additionalWhereConditions", () => {
+  const pagiHelp = new PagiHelpV210({
+    dialect: "postgres",
+  });
+
+  const result = runQuietly(() =>
+    pagiHelp.paginate(
+      {
+        search: "",
+        pageNo: 1,
+        itemsPerPage: 4,
+      },
+      [
+        {
+          tableName: "audit.events",
+          columnList: [
+            { name: "id", alias: "id" },
+            { name: "organization_id", alias: "organizationId" },
+          ],
+          searchColumnList: [],
+          additionalWhereConditions: [["audit.events.organization_id", "=", 42]],
+        },
+      ]
+    )
+  );
+
+  assert.deepStrictEqual(result, {
+    countQuery:
+      'SELECT COUNT(*) AS countValue  FROM "audit"."events" WHERE (audit.events.organization_id = ?)',
+    totalCountQuery:
+      'SELECT COUNT(*) AS countValue  FROM "audit"."events" WHERE (audit.events.organization_id = ?)',
+    query:
+      'SELECT id AS id,organization_id AS organizationId FROM "audit"."events" WHERE (audit.events.organization_id = ?) LIMIT ? OFFSET ?',
+    replacements: [42, 4, 0],
   });
 });
 

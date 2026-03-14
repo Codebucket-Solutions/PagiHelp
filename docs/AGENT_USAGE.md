@@ -1,6 +1,6 @@
 # Agent Usage Guide
 
-This file is the agent-facing quick reference for `pagi-help@2.4.0`.
+This file is the agent-facing quick reference for `pagi-help@2.4.1`.
 
 ## Entry Points
 
@@ -46,6 +46,9 @@ Important differences:
 - MySQL-generated table and `ORDER BY` identifiers use backticks
 - PostgreSQL-generated table and `ORDER BY` identifiers use double quotes
 - PostgreSQL raw `statement` and `joinQuery` fragments must use PostgreSQL SQL, not MySQL-only functions like `IF()`
+- PostgreSQL `tableName` may be schema-qualified, for example `audit.users`
+- Raw `additionalWhereConditions` may use fully-qualified fields like `audit.users.organization_id`
+- Regular filters still resolve by alias or `prefix.column`, not `schema.table.column`
 
 Preferred PostgreSQL operators on `v2`:
 
@@ -241,6 +244,20 @@ Examples:
 ```
 
 Raw fragments are trusted-input-only SQL and must match the selected dialect.
+
+PostgreSQL schema examples:
+
+```js
+{
+  tableName: "audit.users",
+  columnList: [{ name: "id", alias: "id" }],
+  searchColumnList: [],
+}
+```
+
+```js
+additionalWhereConditions: [["audit.users.organization_id", "=", 42]]
+```
 
 ## Execution Pattern
 

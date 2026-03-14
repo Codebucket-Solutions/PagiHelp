@@ -1,6 +1,6 @@
 # PagiHelp Legacy Maintenance Baseline
 
-This file captures the legacy default-export behavior preserved in `index.js` at package version `2.4.0`. It remains the compatibility reference for `require("pagi-help")` and `PagiHelpLegacy`.
+This file captures the legacy default-export behavior preserved in `index.js` at package version `2.4.1`. It remains the compatibility reference for `require("pagi-help")` and `PagiHelpLegacy`.
 
 ## Repository shape
 

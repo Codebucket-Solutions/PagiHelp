@@ -1,12 +1,12 @@
 # PagiHelp v2 Baseline
 
-This file captures the current `v2` contract shipped by `v2.js` at package version `2.4.0`.
+This file captures the current `v2` contract shipped by `v2.js` at package version `2.4.1`.
 
 `v2` is grounded on the old `1.3.0` safe path, but it is now a hardened contract with dialect-aware SQL rendering.
 
 ## Export Map
 
-Package `2.4.0` ships two explicit class contracts:
+Package `2.4.1` ships two explicit class contracts:
 
 - `require("pagi-help")` -> legacy `PagiHelp` default export from `index.js`
 - `require("pagi-help").PagiHelpLegacy` -> same legacy class
@@ -53,6 +53,7 @@ Legacy stays MySQL-only. Dialect support applies to `v2` only.
 `v2` PostgreSQL:
 
 - switches generated table and `ORDER BY` identifiers to double quotes
+- supports schema-qualified `tableName` values and quotes them as `"schema"."table"`
 - paginates with `LIMIT ? OFFSET ?`
 - changes pagination replacement order to `[limit, offset]`
 - validates and renders its own native operator set:
@@ -71,6 +72,11 @@ Legacy stays MySQL-only. Dialect support applies to `v2` only.
 - uses PostgreSQL-safe `IS NULL`, `IS NOT NULL`, `IS DISTINCT FROM`, and `IS NOT DISTINCT FROM` rendering
 
 Raw `statement`, `joinQuery`, and `additionalWhereConditions` fragments are never translated. They must already match the chosen dialect.
+
+Field-resolution boundary:
+
+- regular filters still resolve by alias or `prefix.column`
+- raw `additionalWhereConditions` can use fully-qualified `schema.table.column` fields directly
 
 ## Method Contract
 

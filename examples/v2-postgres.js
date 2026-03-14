@@ -21,26 +21,25 @@ const paginationObject = {
 
 const options = [
   {
-    tableName: "licenses",
+    tableName: "audit.licenses",
     columnList: [
-      { name: "license_id", prefix: "l", alias: "id" },
-      { name: "created_at", prefix: "l", alias: "createdAt" },
-      { name: "stage", prefix: "l", alias: "stage" },
-      { name: "meta_info", prefix: "l", alias: "metaInfo" },
-      { name: "tags", prefix: "l", alias: "tags" },
+      { name: "license_id", alias: "id" },
+      { name: "created_at", alias: "createdAt" },
+      { name: "stage", alias: "stage" },
+      { name: "meta_info", alias: "metaInfo" },
+      { name: "tags", alias: "tags" },
       {
-        statement: "(CASE WHEN l.assigned_to = '1' THEN 'Yes' ELSE 'No' END)",
+        statement:
+          "(CASE WHEN audit.licenses.assigned_to = '1' THEN 'Yes' ELSE 'No' END)",
         alias: "assignedToMe",
       },
-      { name: "email", prefix: "i", alias: "email" },
+      { name: "email", alias: "email" },
     ],
     searchColumnList: [
-      { name: "email", prefix: "i" },
-      { name: "stage", prefix: "l" },
+      { name: "email" },
+      { name: "stage" },
     ],
-    joinQuery:
-      "l LEFT JOIN investor_registration i ON l.investor_id = i.investor_id",
-    additionalWhereConditions: [["l.status", "=", "Active"]],
+    additionalWhereConditions: [["audit.licenses.organization_id", "=", 42]],
   },
 ];
 

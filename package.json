@@ -1,6 +1,6 @@
 {
   "name": "pagi-help",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "description": "Pagination API helper for MySQL and PostgreSQL",
   "main": "index.js",
   "types": "index.d.ts",
