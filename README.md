@@ -2,7 +2,7 @@
 
 Generalized API helper for MySQL search, filters, sorting, and pagination.
 
-This repository now treats the current `1.2.0` runtime behavior as the stable contract.
+This repository now treats the current `1.3.0` runtime behavior as the stable contract.
 
 ## Installation
 
@@ -96,6 +96,51 @@ Available helpers:
 - `validatePaginationInput(paginationObject, options)`
 
 These helpers are intended for preflight checks in apps, wrappers, and AI-generated integrations.
+
+## Safe API
+
+For new integrations, prefer:
+
+```js
+const result = pagiHelp.paginateSafe(paginationObject, options);
+```
+
+`paginateSafe()` returns the same shape as `paginate()`:
+
+```js
+{
+  countQuery,
+  totalCountQuery,
+  query,
+  replacements
+}
+```
+
+Default safe behavior:
+
+- does not mutate caller sort arrays
+- clones options before union padding
+- normalizes `joinQuery` spacing
+- coerces missing `search` to `""`
+- omits dangling `WHERE`
+- rejects `searchColumnList.alias`
+- rejects empty `IN` arrays
+- uses aggregate `countQuery` by default
+- validates inputs before building SQL
+
+Available `safeOptions`:
+
+- `cloneSort`
+- `cloneOptions`
+- `normalizeJoinQuery`
+- `coerceUndefinedSearchToEmpty`
+- `omitEmptyWhere`
+- `rejectSearchAliases`
+- `emptyInStrategy`: `"throw" | "static" | "legacy"`
+- `countQueryMode`: `"aggregate" | "select"`
+- `validate`
+
+Use legacy `paginate()` only when you intentionally need the old SQL shape and quirks.
 
 ## Quick Start
 
@@ -377,7 +422,7 @@ Current behavior:
 
 ## Important Runtime Notes
 
-These are current real behaviors of `1.2.0`:
+These are current real behaviors of `1.3.0`:
 
 - `joinQuery` is concatenated directly after ``FROM `tableName``` with no normalization
 - if `search` is omitted and `searchColumnList` is non-empty, the library searches for `%undefined%`

@@ -1,12 +1,13 @@
 # Agent Usage Guide
 
-This file is the agent-facing quick reference for `pagi-help@1.2.0`.
+This file is the agent-facing quick reference for `pagi-help@1.3.0`.
 
 Use this file for normal integration work. Use `docs/MAINTENANCE_BASELINE.md` when you need exact behavior details and quirks.
 
 ## Safe Default Rules
 
-- Use `paginate()` for application code.
+- Use `paginateSafe()` for new application code.
+- Use `paginate()` only when you must preserve the legacy SQL contract exactly.
 - Always pass `search` as a string. Use `""` when search is disabled.
 - Always pass `searchColumnList`. Use `[]` if there are no search columns.
 - Always give returned columns an `alias`. In practice, `id` should exist.
@@ -104,6 +105,48 @@ Return shape:
 ```
 
 These helpers report risky or broken input, but they do not mutate or change `paginate()` behavior.
+
+## `paginateSafe()`
+
+Use this when you want the library to keep the old API shape but avoid the worst legacy footguns.
+
+```js
+const result = pagiHelp.paginateSafe(paginationObject, options);
+```
+
+Default behavior:
+
+- clone caller sort arrays instead of mutating them
+- clone option arrays before `filler()` inserts `(NULL)` padding
+- normalize `joinQuery` to include leading whitespace
+- coerce missing `search` to `""`
+- omit empty `WHERE`
+- reject `searchColumnList.alias`
+- reject empty `IN` arrays
+- return aggregate `countQuery` by default
+- validate inputs before generating SQL
+
+Supported `safeOptions`:
+
+```js
+{
+  cloneSort: true,
+  cloneOptions: true,
+  normalizeJoinQuery: true,
+  coerceUndefinedSearchToEmpty: true,
+  omitEmptyWhere: true,
+  rejectSearchAliases: true,
+  emptyInStrategy: "throw",
+  countQueryMode: "aggregate",
+  validate: true
+}
+```
+
+Compatibility flags:
+
+- `emptyInStrategy: "legacy"` keeps the old invalid `IN ()` behavior
+- `emptyInStrategy: "static"` converts empty `IN` arrays into constant SQL conditions
+- `countQueryMode: "select"` restores the legacy row-select `countQuery`
 
 ## `columnList` Shapes
 

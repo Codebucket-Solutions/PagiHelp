@@ -37,6 +37,17 @@ const expectThrowString = (fn, expected) => {
   assert.equal(thrown, expected);
 };
 
+const expectThrowMessage = (fn, expected) => {
+  let thrown;
+  try {
+    fn();
+  } catch (error) {
+    thrown = error;
+  }
+  assert.equal(thrown instanceof Error, true);
+  assert.equal(thrown.message, expected);
+};
+
 const tests = [];
 
 const test = (name, fn) => {
@@ -995,6 +1006,192 @@ test("validatePaginationInput accepts valid legacy input without forcing behavio
     valid: true,
     errors: [],
     warnings: [],
+  });
+});
+
+test("paginateSafe omits dangling WHERE and avoids mutating sort arrays by default", () => {
+  const pagiHelp = new PagiHelp();
+  const paginationObject = {
+    search: "",
+    sort: {
+      attributes: ["created_at"],
+      sorts: ["asc"],
+    },
+  };
+  const options = [
+    {
+      tableName: "events",
+      columnList: [
+        { name: "id", alias: "id" },
+        { name: "created_at", alias: "created_at" },
+      ],
+      searchColumnList: [],
+    },
+  ];
+
+  const result = pagiHelp.paginateSafe(paginationObject, options);
+
+  assert.deepStrictEqual(result, {
+    countQuery: "SELECT COUNT(*) AS countValue  FROM `events`",
+    totalCountQuery: "SELECT COUNT(*) AS countValue  FROM `events`",
+    query:
+      "SELECT id AS id,created_at AS created_at FROM `events` ORDER BY `created_at`ASC,`id`DESC",
+    replacements: [],
+  });
+  assert.deepStrictEqual(paginationObject.sort.attributes, ["created_at"]);
+  assert.deepStrictEqual(paginationObject.sort.sorts, ["asc"]);
+});
+
+test("paginateSafe clones options before filler mutates union column lists", () => {
+  const pagiHelp = new PagiHelp();
+  const paginationObject = {
+    search: "",
+  };
+  const options = [
+    {
+      tableName: "a",
+      columnList: [
+        { name: "id", alias: "id" },
+        { name: "name", alias: "name" },
+      ],
+      searchColumnList: [],
+    },
+    {
+      tableName: "b",
+      columnList: [{ name: "id", alias: "id" }],
+      searchColumnList: [],
+    },
+  ];
+
+  const result = pagiHelp.paginateSafe(paginationObject, options);
+
+  assert.equal(
+    result.query,
+    "SELECT id AS id,name AS name FROM `a` UNION ALL SELECT id AS id,(NULL) AS name FROM `b`"
+  );
+  assert.deepStrictEqual(options, [
+    {
+      tableName: "a",
+      columnList: [
+        { name: "id", alias: "id" },
+        { name: "name", alias: "name" },
+      ],
+      searchColumnList: [],
+    },
+    {
+      tableName: "b",
+      columnList: [{ name: "id", alias: "id" }],
+      searchColumnList: [],
+    },
+  ]);
+});
+
+test("paginateSafe normalizes joinQuery and coerces undefined search to empty by default", () => {
+  const pagiHelp = new PagiHelp();
+  const paginationObject = {
+    pageNo: 1,
+    itemsPerPage: 10,
+  };
+  const options = [
+    {
+      tableName: "users",
+      columnList: [
+        { name: "id", alias: "id", prefix: "u" },
+        { name: "email", alias: "email", prefix: "u" },
+      ],
+      searchColumnList: [{ name: "u.email" }],
+      joinQuery: "u",
+    },
+  ];
+
+  const result = pagiHelp.paginateSafe(paginationObject, options);
+
+  assert.deepStrictEqual(result, {
+    countQuery: "SELECT COUNT(*) AS countValue  FROM `users` u",
+    totalCountQuery: "SELECT COUNT(*) AS countValue  FROM `users` u",
+    query: "SELECT u.id AS id,u.email AS email FROM `users` u LIMIT ?,?",
+    replacements: [0, 10],
+  });
+});
+
+test("paginateSafe rejects search aliases by default", () => {
+  const pagiHelp = new PagiHelp();
+
+  expectThrowMessage(
+    () =>
+      pagiHelp.paginateSafe(
+        {
+          search: "mail",
+        },
+        [
+          {
+            tableName: "users",
+            columnList: [
+              { name: "id", alias: "id" },
+              { name: "email", alias: "email" },
+            ],
+            searchColumnList: [{ name: "email", alias: "email" }],
+          },
+        ]
+      ),
+    "options[0].searchColumnList[0].alias is not supported in searchColumnList"
+  );
+});
+
+test("paginateSafe rejects empty IN arrays by default", () => {
+  const pagiHelp = new PagiHelp();
+
+  expectThrowMessage(
+    () =>
+      pagiHelp.paginateSafe(
+        {
+          search: "",
+          filters: ["status", "IN", []],
+        },
+        [
+          {
+            tableName: "events",
+            columnList: [
+              { name: "id", alias: "id" },
+              { name: "status", alias: "status" },
+            ],
+            searchColumnList: [],
+          },
+        ]
+      ),
+    "paginationObject.filters[2] must not be an empty array for IN"
+  );
+});
+
+test("paginateSafe supports static empty IN handling and select countQuery mode", () => {
+  const pagiHelp = new PagiHelp();
+  const result = pagiHelp.paginateSafe(
+    {
+      search: "",
+      filters: ["status", "IN", []],
+    },
+    [
+      {
+        tableName: "events",
+        columnList: [
+          { name: "id", alias: "id" },
+          { name: "status", alias: "status" },
+        ],
+        searchColumnList: [],
+      },
+    ],
+    {
+      emptyInStrategy: "static",
+      countQueryMode: "select",
+    }
+  );
+
+  assert.deepStrictEqual(result, {
+    countQuery: "SELECT id AS id,status AS status FROM `events` WHERE (0 = 1)",
+    totalCountQuery:
+      "SELECT COUNT(*) AS countValue  FROM `events` WHERE (0 = 1)",
+    query: "SELECT id AS id,status AS status FROM `events` WHERE (0 = 1)",
+    replacements: [],
   });
 });
 

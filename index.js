@@ -28,6 +28,18 @@ const allowedOperators = [
 
 const allowedSorts = ["ASC", "DESC"];
 
+const defaultSafePaginateOptions = {
+  cloneSort: true,
+  cloneOptions: true,
+  normalizeJoinQuery: true,
+  coerceUndefinedSearchToEmpty: true,
+  omitEmptyWhere: true,
+  rejectSearchAliases: true,
+  emptyInStrategy: "throw",
+  countQueryMode: "aggregate",
+  validate: true,
+};
+
 const toCamelCase = (str) =>
   str.replace(/_([a-zA-Z0-9])/g, (_, char) => {
     return /[a-zA-Z]/.test(char) ? char.toUpperCase() : char;
@@ -882,6 +894,365 @@ class PagiHelp {
     }
 
     return query;
+  };
+
+  normalizeSafePaginateOptions = (safeOptions = {}) => {
+    const options = {
+      ...defaultSafePaginateOptions,
+      ...safeOptions,
+    };
+
+    if (!["throw", "static", "legacy"].includes(options.emptyInStrategy)) {
+      throw new Error(
+        'paginateSafe emptyInStrategy must be "throw", "static", or "legacy"'
+      );
+    }
+
+    if (!["aggregate", "select"].includes(options.countQueryMode)) {
+      throw new Error(
+        'paginateSafe countQueryMode must be "aggregate" or "select"'
+      );
+    }
+
+    return options;
+  };
+
+  filterValidationResultForSafeOptions = (validationResult, safeOptions) => {
+    const result = {
+      valid: validationResult.valid,
+      errors: [...validationResult.errors],
+      warnings: [...validationResult.warnings],
+    };
+
+    if (safeOptions.coerceUndefinedSearchToEmpty) {
+      result.warnings = result.warnings.filter(
+        (warning) =>
+          warning !==
+          'paginationObject.search is undefined; current paginate() will search for "%undefined%" when searchColumnList is non-empty'
+      );
+    }
+
+    if (safeOptions.cloneSort) {
+      result.warnings = result.warnings.filter(
+        (warning) => warning !== "paginationObject.sort will be mutated by paginate()"
+      );
+    }
+
+    if (!safeOptions.rejectSearchAliases) {
+      result.errors = result.errors.filter(
+        (error) => !error.endsWith(".alias is not supported in searchColumnList")
+      );
+    }
+
+    if (safeOptions.emptyInStrategy !== "throw") {
+      result.errors = result.errors.filter(
+        (error) => !error.includes("must not be an empty array for")
+      );
+    }
+
+    result.valid = result.errors.length === 0;
+    return result;
+  };
+
+  prepareSafePaginationObject = (paginationObject, safeOptions) => {
+    const prepared = {
+      ...paginationObject,
+    };
+
+    if (paginationObject.sort) {
+      prepared.sort = {
+        ...paginationObject.sort,
+        attributes: safeOptions.cloneSort
+          ? [...paginationObject.sort.attributes]
+          : paginationObject.sort.attributes,
+        sorts: safeOptions.cloneSort
+          ? [...paginationObject.sort.sorts]
+          : paginationObject.sort.sorts,
+      };
+    }
+
+    if (
+      safeOptions.coerceUndefinedSearchToEmpty &&
+      prepared.search === undefined
+    ) {
+      prepared.search = "";
+    }
+
+    return prepared;
+  };
+
+  normalizeSafeJoinQuery = (joinQuery = "") => {
+    if (!joinQuery) {
+      return "";
+    }
+
+    if (/^\s/.test(joinQuery)) {
+      return joinQuery;
+    }
+
+    return ` ${joinQuery}`;
+  };
+
+  prepareSafeOptions = (options, safeOptions) =>
+    options.map((option) => ({
+      ...option,
+      joinQuery: safeOptions.normalizeJoinQuery
+        ? this.normalizeSafeJoinQuery(option.joinQuery)
+        : option.joinQuery || "",
+      columnList: safeOptions.cloneOptions
+        ? option.columnList.map((column) => ({ ...column }))
+        : option.columnList,
+      searchColumnList: safeOptions.cloneOptions
+        ? option.searchColumnList.map((column) => ({ ...column }))
+        : option.searchColumnList,
+    }));
+
+  tupleCreatorSafe = (tuple, replacements, asItIs = false, safeOptions) => {
+    const operator = tuple[1]?.toUpperCase?.();
+    const value = tuple[2];
+
+    if (
+      Array.isArray(value) &&
+      value.length === 0 &&
+      ["IN", "NOT IN", "! IN"].includes(operator)
+    ) {
+      if (safeOptions.emptyInStrategy === "throw") {
+        throw new Error(
+          `${operator} does not accept an empty array in paginateSafe()`
+        );
+      }
+
+      if (safeOptions.emptyInStrategy === "static") {
+        return operator === "IN" ? "0 = 1" : "1 = 1";
+      }
+    }
+
+    return this.tupleCreator(tuple, replacements, asItIs);
+  };
+
+  genSchemaSafe = (schemaArray, replacements, asItIs = false, safeOptions) => {
+    if (!(schemaArray[0] instanceof Array)) {
+      return this.tupleCreatorSafe(schemaArray, replacements, asItIs, safeOptions);
+    }
+
+    let returnString = "(";
+
+    for (const schemaObject of schemaArray) {
+      if (!(schemaObject[0] instanceof Array)) {
+        returnString +=
+          this.tupleCreatorSafe(schemaObject, replacements, asItIs, safeOptions) +
+          " AND ";
+      } else {
+        let subString = "( ";
+        for (const subObject of schemaObject) {
+          subString +=
+            this.genSchemaSafe(subObject, replacements, asItIs, safeOptions) +
+            " OR ";
+        }
+        returnString += rtrim(subString, " OR ") + ") AND ";
+      }
+    }
+
+    return rtrim(returnString, " AND ") + ")";
+  };
+
+  buildSafeSearchColumns = (searchColumnList, safeOptions) => {
+    if (safeOptions.rejectSearchAliases) {
+      for (let index = 0; index < searchColumnList.length; index++) {
+        if (searchColumnList[index].alias !== undefined) {
+          throw new Error(
+            `searchColumnList[${index}].alias is not allowed in paginateSafe()`
+          );
+        }
+      }
+    }
+
+    return this.columNames(searchColumnList);
+  };
+
+  buildSafeBaseQueries = (
+    tableName,
+    joinQuery,
+    columnList,
+    countQueryMode = "aggregate"
+  ) => {
+    const selectColumns = columnList.join(",");
+    const fromClause = " FROM `" + tableName + "`" + joinQuery;
+    const selectQuery = "SELECT " + selectColumns + fromClause;
+    const aggregateQuery = "SELECT COUNT(*) AS countValue " + fromClause;
+
+    return {
+      query: selectQuery,
+      countQuery: countQueryMode === "aggregate" ? aggregateQuery : selectQuery,
+      totalCountQuery: aggregateQuery,
+    };
+  };
+
+  buildSafeWhereQuery = (
+    paginationObject,
+    searchColumnList,
+    filterConditions,
+    additionalWhereConditions,
+    replacements,
+    safeOptions
+  ) => {
+    const whereClauses = [];
+
+    if (additionalWhereConditions.length > 0) {
+      whereClauses.push(
+        this.genSchemaSafe(
+          additionalWhereConditions,
+          replacements,
+          true,
+          safeOptions
+        ).trim()
+      );
+    }
+
+    if (filterConditions.length > 0) {
+      whereClauses.push(
+        this.genSchemaSafe(
+          filterConditions,
+          replacements,
+          false,
+          safeOptions
+        ).trim()
+      );
+    }
+
+    if (searchColumnList.length > 0 && paginationObject.search !== "") {
+      const searchConditions = [];
+      for (const column of searchColumnList) {
+        searchConditions.push(`${column} LIKE ?`);
+        replacements.push(`%${paginationObject.search}%`);
+      }
+      whereClauses.push(`( ${searchConditions.join(" OR ")} )`);
+    }
+
+    if (whereClauses.length === 0) {
+      return safeOptions.omitEmptyWhere ? "" : " WHERE ";
+    }
+
+    return ` WHERE ${whereClauses.join(" AND ")}`;
+  };
+
+  singleTablePaginationSafe = (
+    tableName,
+    paginationObject,
+    searchColumnList,
+    joinQuery = "",
+    columnList = [{ name: "*" }],
+    additionalWhereConditions = [],
+    safeOptions = defaultSafePaginateOptions
+  ) => {
+    const filters = this.normalizeFilters(paginationObject.filters);
+    const filterConditions = this.collectFilterConditions(filters, columnList);
+    const renderedColumns = this.columNames(columnList);
+    const renderedSearchColumns = this.buildSafeSearchColumns(
+      searchColumnList,
+      safeOptions
+    );
+    const { query, countQuery, totalCountQuery } = this.buildSafeBaseQueries(
+      tableName,
+      joinQuery,
+      renderedColumns,
+      safeOptions.countQueryMode
+    );
+
+    const replacements = [];
+    const whereQuery = this.buildSafeWhereQuery(
+      paginationObject,
+      renderedSearchColumns,
+      filterConditions,
+      additionalWhereConditions,
+      replacements,
+      safeOptions
+    );
+
+    return {
+      query: query + whereQuery,
+      countQuery: countQuery + whereQuery,
+      totalCountQuery: totalCountQuery + whereQuery,
+      replacements,
+    };
+  };
+
+  paginateSafe = (paginationObject, options, safeOptions = {}) => {
+    const normalizedSafeOptions = this.normalizeSafePaginateOptions(safeOptions);
+    const preparedPaginationObject = this.prepareSafePaginationObject(
+      paginationObject,
+      normalizedSafeOptions
+    );
+    const preparedOptions = this.prepareSafeOptions(options, normalizedSafeOptions);
+
+    if (normalizedSafeOptions.validate) {
+      const validationResult = this.filterValidationResultForSafeOptions(
+        this.validatePaginationInput(preparedPaginationObject, preparedOptions),
+        normalizedSafeOptions
+      );
+
+      if (!validationResult.valid) {
+        throw new Error(validationResult.errors.join("\n"));
+      }
+    }
+
+    if (preparedPaginationObject.sort) {
+      preparedPaginationObject.sort.attributes.push("id");
+      preparedPaginationObject.sort.sorts.push("desc");
+    }
+
+    let query = "";
+    let countQuery = "";
+    let totalCountQuery = "";
+    const replacements = [];
+    const countQueries = [];
+    const totalCountQueries = [];
+    const filledOptions = this.filler(preparedOptions);
+
+    for (const option of filledOptions) {
+      const queryObject = this.singleTablePaginationSafe(
+        option.tableName,
+        preparedPaginationObject,
+        option.searchColumnList,
+        option.joinQuery ? option.joinQuery : "",
+        option.columnList ? option.columnList : [{ name: "*" }],
+        option.additionalWhereConditions ? option.additionalWhereConditions : [],
+        normalizedSafeOptions
+      );
+
+      query += queryObject.query + " UNION ALL ";
+      if (normalizedSafeOptions.countQueryMode === "aggregate") {
+        countQueries.push(queryObject.countQuery);
+      } else {
+        countQuery += queryObject.countQuery + " UNION ALL ";
+      }
+      totalCountQueries.push(queryObject.totalCountQuery);
+      replacements.push(...queryObject.replacements);
+    }
+
+    query = this.stripTrailingUnionAll(query).trim();
+    countQuery =
+      normalizedSafeOptions.countQueryMode === "aggregate"
+        ? this.buildTotalCountQuery(countQueries)
+        : this.stripTrailingUnionAll(countQuery).trim();
+    totalCountQuery = this.buildTotalCountQuery(totalCountQueries);
+
+    if (
+      preparedPaginationObject.sort &&
+      Object.keys(preparedPaginationObject.sort).length !== 0
+    ) {
+      const orderByQuery = this.buildOrderByQuery(preparedPaginationObject.sort);
+      query += /\s$/.test(query) ? orderByQuery : ` ${orderByQuery}`;
+    }
+
+    query = this.applyPagination(query, preparedPaginationObject, replacements);
+
+    return {
+      countQuery,
+      totalCountQuery,
+      query,
+      replacements,
+    };
   };
 
   paginate = (paginationObject, options) => {

@@ -1,6 +1,6 @@
 # PagiHelp Maintenance Baseline
 
-This file captures the actual behavior of the library as shipped in `index.js` at package version `1.2.0`. It is intended to be the pre-change reference for future edits so improvements can be made without accidentally changing existing query-generation behavior.
+This file captures the actual behavior of the library as shipped in `index.js` at package version `1.3.0`. It is intended to be the pre-change reference for future edits so improvements can be made without accidentally changing existing query-generation behavior.
 
 ## Repository shape
 
@@ -46,6 +46,9 @@ These methods are implemented as instance fields on the class and are therefore 
 - `createValidationResult()`, `addValidationIssue()`, and `mergeValidationResults()` build validation reports.
 - `isConditionTuple()`, `validateConditionTuple()`, `validateConditionInput()`, `validateSortInput()`, and `validateColumnDescriptor()` are the lower-level validation helpers.
 - `validatePaginationObject(paginationObject)`, `validateOptions(options)`, and `validatePaginationInput(paginationObject, options)` report errors and warnings without changing runtime behavior.
+- `normalizeSafePaginateOptions()`, `filterValidationResultForSafeOptions()`, `prepareSafePaginationObject()`, `normalizeSafeJoinQuery()`, and `prepareSafeOptions()` prepare safe-mode inputs.
+- `tupleCreatorSafe()`, `genSchemaSafe()`, `buildSafeSearchColumns()`, `buildSafeBaseQueries()`, `buildSafeWhereQuery()`, and `singleTablePaginationSafe()` are the safe-mode query builders.
+- `paginateSafe(paginationObject, options, safeOptions)` is the additive opt-in API that keeps the return shape but applies safer defaults.
 - `singleTablePagination(tableName, paginationObject, searchColumnList, joinQuery, columnList, additionalWhereConditions)` builds one table-specific `SELECT`, `countQuery`, `totalCountQuery`, and replacement list.
 - `filler(data)` aligns `columnList` aliases across multiple option blocks by inserting `(NULL)` placeholders so `UNION ALL` projections match.
 - `paginate(paginationObject, options)` is the main public entry point; it unions table queries, applies ordering, and applies offset pagination.
@@ -103,6 +106,24 @@ Important distinction:
 - `query` is the data query with optional `ORDER BY` and `LIMIT`.
 - `countQuery` is not a `COUNT(*)` query. It is a row-select query without `ORDER BY` / `LIMIT`. Existing callers can count rows by measuring the result length.
 - `totalCountQuery` is the actual aggregate count query.
+
+## Opt-in safe API
+
+`paginateSafe()` is additive and does not change legacy `paginate()`.
+
+Default safe-mode behavior:
+
+- clones caller sort arrays
+- clones options before `filler()` mutates `columnList`
+- normalizes `joinQuery` leading whitespace
+- coerces missing `search` to `""`
+- omits dangling `WHERE`
+- rejects `searchColumnList.alias`
+- rejects empty `IN` arrays unless configured otherwise
+- returns aggregate `countQuery` by default
+- validates inputs before generating SQL
+
+Compatibility flags allow callers to selectively keep legacy behavior where needed.
 
 ## Filter semantics
 
@@ -214,6 +235,7 @@ The current test suite covers:
 - Basic single-table query generation with search, filters, sort, and page-based pagination.
 - Direct helper behavior for `columNames()`, `tupleCreator()`, `genSchema()`, and `singleTablePagination()`.
 - Validation helpers for pagination objects, options, and combined input checking.
+- `paginateSafe()` defaults for sort cloning, option cloning, empty-where omission, join normalization, search coercion, aggregate counts, and configurable empty-`IN` handling.
 - CamelCase/snake_case alias resolution and special operators.
 - Multi-table `UNION ALL` generation with alias padding and aggregate total counts.
 - Raw `additionalWhereConditions` subquery support.

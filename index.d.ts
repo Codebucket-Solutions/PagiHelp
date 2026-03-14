@@ -83,6 +83,78 @@ declare class PagiHelp {
     options: PagiHelp.PaginationOption[]
   ): PagiHelp.ValidationResult;
 
+  normalizeSafePaginateOptions(
+    safeOptions?: PagiHelp.SafePaginateOptions
+  ): PagiHelp.ResolvedSafePaginateOptions;
+
+  filterValidationResultForSafeOptions(
+    validationResult: PagiHelp.ValidationResult,
+    safeOptions: PagiHelp.ResolvedSafePaginateOptions
+  ): PagiHelp.ValidationResult;
+
+  prepareSafePaginationObject(
+    paginationObject: PagiHelp.PaginationInput,
+    safeOptions: PagiHelp.ResolvedSafePaginateOptions
+  ): PagiHelp.PaginationInput;
+
+  normalizeSafeJoinQuery(joinQuery?: string): string;
+
+  prepareSafeOptions(
+    options: PagiHelp.PaginationOption[],
+    safeOptions: PagiHelp.ResolvedSafePaginateOptions
+  ): PagiHelp.PaginationOption[];
+
+  tupleCreatorSafe(
+    tuple: PagiHelp.ConditionTuple,
+    replacements: unknown[],
+    asItIs: boolean | undefined,
+    safeOptions: PagiHelp.ResolvedSafePaginateOptions
+  ): string;
+
+  genSchemaSafe(
+    schemaArray: PagiHelp.ConditionInput,
+    replacements: unknown[],
+    asItIs: boolean | undefined,
+    safeOptions: PagiHelp.ResolvedSafePaginateOptions
+  ): string;
+
+  buildSafeSearchColumns(
+    searchColumnList: PagiHelp.SearchColumnDescriptor[],
+    safeOptions: PagiHelp.ResolvedSafePaginateOptions
+  ): string[];
+
+  buildSafeBaseQueries(
+    tableName: string,
+    joinQuery: string,
+    columnList: string[],
+    countQueryMode?: PagiHelp.SafeCountQueryMode
+  ): PagiHelp.BaseQueries;
+
+  buildSafeWhereQuery(
+    paginationObject: PagiHelp.PaginationInput,
+    searchColumnList: string[],
+    filterConditions: PagiHelp.ConditionSchema,
+    additionalWhereConditions: PagiHelp.ConditionInput | [],
+    replacements: unknown[],
+    safeOptions: PagiHelp.ResolvedSafePaginateOptions
+  ): string;
+
+  singleTablePaginationSafe(
+    tableName: string,
+    paginationObject: PagiHelp.PaginationInput,
+    searchColumnList: PagiHelp.SearchColumnDescriptor[],
+    joinQuery?: string,
+    columnList?: PagiHelp.ColumnDescriptor[],
+    additionalWhereConditions?: PagiHelp.ConditionInput | [],
+    safeOptions?: PagiHelp.ResolvedSafePaginateOptions
+  ): PagiHelp.PaginationResult;
+
+  paginateSafe(
+    paginationObject: PagiHelp.PaginationInput,
+    options: PagiHelp.PaginationOption[],
+    safeOptions?: PagiHelp.SafePaginateOptions
+  ): PagiHelp.PaginationResult;
+
   processFilterCondition(
     condition: PagiHelp.ConditionInput,
     columnList: PagiHelp.ColumnDescriptor[]
@@ -142,6 +214,10 @@ declare namespace PagiHelp {
   }
 
   type SortDirection = "ASC" | "DESC" | "asc" | "desc";
+
+  type EmptyInStrategy = "throw" | "static" | "legacy";
+
+  type SafeCountQueryMode = "aggregate" | "select";
 
   /**
    * Sort instructions for `paginate()`.
@@ -294,6 +370,30 @@ declare namespace PagiHelp {
     valid: boolean;
     errors: string[];
     warnings: string[];
+  }
+
+  interface SafePaginateOptions {
+    cloneSort?: boolean;
+    cloneOptions?: boolean;
+    normalizeJoinQuery?: boolean;
+    coerceUndefinedSearchToEmpty?: boolean;
+    omitEmptyWhere?: boolean;
+    rejectSearchAliases?: boolean;
+    emptyInStrategy?: EmptyInStrategy;
+    countQueryMode?: SafeCountQueryMode;
+    validate?: boolean;
+  }
+
+  interface ResolvedSafePaginateOptions {
+    cloneSort: boolean;
+    cloneOptions: boolean;
+    normalizeJoinQuery: boolean;
+    coerceUndefinedSearchToEmpty: boolean;
+    omitEmptyWhere: boolean;
+    rejectSearchAliases: boolean;
+    emptyInStrategy: EmptyInStrategy;
+    countQueryMode: SafeCountQueryMode;
+    validate: boolean;
   }
 
   interface BaseQueries {
