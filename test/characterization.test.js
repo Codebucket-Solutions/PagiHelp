@@ -1,6 +1,7 @@
 const assert = require("assert/strict");
 
 const PagiHelp = require("../index");
+const PagiHelpV210 = require("../v2");
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
@@ -1191,6 +1192,171 @@ test("paginateSafe supports static empty IN handling and select countQuery mode"
     totalCountQuery:
       "SELECT COUNT(*) AS countValue  FROM `events` WHERE (0 = 1)",
     query: "SELECT id AS id,status AS status FROM `events` WHERE (0 = 1)",
+    replacements: [],
+  });
+});
+
+test("legacy export exposes the separate 2.1.0 class without changing the default export", () => {
+  assert.equal(typeof PagiHelp, "function");
+  assert.equal(PagiHelp.PagiHelpLegacy, PagiHelp);
+  assert.equal(PagiHelp.PagiHelpV210, PagiHelpV210);
+  assert.equal(PagiHelp.PagiHelpV2, PagiHelpV210);
+  assert.notEqual(PagiHelp, PagiHelpV210);
+});
+
+test("2.1.0 paginate uses the safe contract by default while leaving legacy paginate unchanged", () => {
+  const legacy = new PagiHelp();
+  const modern = new PagiHelpV210();
+  const paginationObject = {
+    sort: {
+      attributes: ["created_at"],
+      sorts: ["asc"],
+    },
+    pageNo: 1,
+    itemsPerPage: 10,
+  };
+  const options = [
+    {
+      tableName: "users",
+      columnList: [
+        { name: "id", alias: "id" },
+        { name: "email", alias: "email" },
+        { name: "created_at", alias: "created_at" },
+      ],
+      searchColumnList: [{ name: "email" }],
+    },
+  ];
+
+  const modernInput = clone(paginationObject);
+  const modernResult = runQuietly(() =>
+    modern.paginate(modernInput, clone(options))
+  );
+  const legacyInput = clone(paginationObject);
+  const legacyResult = runQuietly(() =>
+    legacy.paginate(legacyInput, clone(options))
+  );
+
+  assert.deepStrictEqual(modernResult, {
+    countQuery: "SELECT COUNT(*) AS countValue  FROM `users`",
+    totalCountQuery: "SELECT COUNT(*) AS countValue  FROM `users`",
+    query:
+      "SELECT id AS id,email AS email,created_at AS created_at FROM `users` ORDER BY `created_at`ASC,`id`DESC LIMIT ?,?",
+    replacements: [0, 10],
+  });
+  assert.deepStrictEqual(legacyResult, {
+    countQuery:
+      "SELECT id AS id,email AS email,created_at AS created_at FROM `users` WHERE ( email LIKE ?  ) ",
+    totalCountQuery:
+      "SELECT COUNT(*) AS countValue  FROM `users` WHERE ( email LIKE ?  )",
+    query:
+      "SELECT id AS id,email AS email,created_at AS created_at FROM `users` WHERE ( email LIKE ?  ) ORDER BY `created_at`ASC,`id`DESC LIMIT ?,?",
+    replacements: ["%undefined%", 0, 10],
+  });
+  assert.deepStrictEqual(modernInput.sort.attributes, ["created_at"]);
+  assert.deepStrictEqual(modernInput.sort.sorts, ["asc"]);
+  assert.deepStrictEqual(legacyInput.sort.attributes, ["created_at", "id"]);
+  assert.deepStrictEqual(legacyInput.sort.sorts, ["ASC", "DESC"]);
+});
+
+test("2.1.0 paginate rejects legacy search aliases by default and can fall back per call", () => {
+  const modern = new PagiHelpV210();
+  const paginationObject = {
+    search: "mail",
+  };
+  const options = [
+    {
+      tableName: "users",
+      columnList: [
+        { name: "id", alias: "id" },
+        { name: "email", alias: "email" },
+      ],
+      searchColumnList: [{ name: "email", alias: "email" }],
+    },
+  ];
+
+  expectThrowMessage(
+    () => runQuietly(() => modern.paginate(clone(paginationObject), clone(options))),
+    "options[0].searchColumnList[0].alias is not supported in searchColumnList"
+  );
+
+  const legacyCompatResult = runQuietly(() =>
+    modern.paginate(clone(paginationObject), clone(options), {
+      rejectSearchAliases: false,
+      countQueryMode: "select",
+      validate: false,
+    })
+  );
+
+  assert.equal(
+    legacyCompatResult.countQuery,
+    "SELECT id AS id,email AS email FROM `users` WHERE ( email AS email LIKE ? )"
+  );
+  assert.deepStrictEqual(legacyCompatResult.replacements, ["%mail%"]);
+});
+
+test("2.1.0 singleTablePagination is quiet and omits the dangling WHERE by default", () => {
+  const modern = new PagiHelpV210();
+  const { result, logs } = captureLogs(() =>
+    modern.singleTablePagination(
+      "events",
+      { search: "" },
+      [],
+      "",
+      [{ name: "id", alias: "id" }]
+    )
+  );
+
+  assert.deepStrictEqual(result, {
+    countQuery: "SELECT COUNT(*) AS countValue  FROM `events`",
+    totalCountQuery: "SELECT COUNT(*) AS countValue  FROM `events`",
+    query: "SELECT id AS id FROM `events`",
+    replacements: [],
+  });
+  assert.deepStrictEqual(logs, []);
+});
+
+test("2.1.0 constructor safeOptions become the class default and paginateLegacy still delegates to 1.3.0 behavior", () => {
+  const modern = new PagiHelpV210({
+    safeOptions: {
+      countQueryMode: "select",
+      emptyInStrategy: "static",
+    },
+  });
+  const paginationObject = {
+    search: "",
+    filters: ["status", "IN", []],
+  };
+  const options = [
+    {
+      tableName: "events",
+      columnList: [
+        { name: "id", alias: "id" },
+        { name: "status", alias: "status" },
+      ],
+      searchColumnList: [],
+    },
+  ];
+
+  const safeResult = runQuietly(() =>
+    modern.paginate(clone(paginationObject), clone(options))
+  );
+  const legacyResult = runQuietly(() =>
+    modern.paginateLegacy(clone(paginationObject), clone(options))
+  );
+
+  assert.deepStrictEqual(safeResult, {
+    countQuery: "SELECT id AS id,status AS status FROM `events` WHERE (0 = 1)",
+    totalCountQuery: "SELECT COUNT(*) AS countValue  FROM `events` WHERE (0 = 1)",
+    query: "SELECT id AS id,status AS status FROM `events` WHERE (0 = 1)",
+    replacements: [],
+  });
+  assert.deepStrictEqual(legacyResult, {
+    countQuery:
+      "SELECT id AS id,status AS status FROM `events` WHERE (status IN ())  ",
+    totalCountQuery:
+      "SELECT COUNT(*) AS countValue  FROM `events` WHERE (status IN ()) ",
+    query:
+      "SELECT id AS id,status AS status FROM `events` WHERE (status IN ())  ",
     replacements: [],
   });
 });

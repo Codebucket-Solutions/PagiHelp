@@ -1305,3 +1305,16 @@ class PagiHelp {
 }
 
 module.exports = PagiHelp;
+module.exports.PagiHelpLegacy = PagiHelp;
+Object.defineProperty(module.exports, "PagiHelpV210", {
+  enumerable: true,
+  get() {
+    return require("./v2");
+  },
+});
+Object.defineProperty(module.exports, "PagiHelpV2", {
+  enumerable: true,
+  get() {
+    return require("./v2");
+  },
+});

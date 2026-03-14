@@ -1,6 +1,6 @@
 {
   "name": "pagi-help",
-  "version": "1.3.0",
+  "version": "2.1.0",
   "description": "Pagination Api Helper For Mysql",
   "main": "index.js",
   "types": "index.d.ts",
@@ -14,10 +14,13 @@
   "files": [
     "index.js",
     "index.d.ts",
+    "v2.js",
+    "v2.d.ts",
     "README.md",
     "LICENSE",
     "diagram.png",
-    "docs/AGENT_USAGE.md",
+    "AGENTS.md",
+    "docs/",
     "examples/"
   ],
   "keywords": [
