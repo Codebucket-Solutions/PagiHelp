@@ -1,6 +1,6 @@
 const PagiHelp = require("./index");
 
-const defaultV210Options = Object.freeze({
+const fixedV2SafeOptions = Object.freeze({
   cloneSort: true,
   cloneOptions: true,
   normalizeJoinQuery: true,
@@ -9,70 +9,239 @@ const defaultV210Options = Object.freeze({
   rejectSearchAliases: true,
   emptyInStrategy: "throw",
   countQueryMode: "aggregate",
+});
+
+const defaultV2SafeOptions = Object.freeze({
   validate: true,
 });
+
+const supportedV2SafeOptionKeys = new Set(["validate"]);
 
 class PagiHelpV210 extends PagiHelp {
   constructor(options = {}) {
     const { safeOptions, ...legacyOptions } = options || {};
     super(legacyOptions);
-    const legacyTupleCreatorSafe = this.tupleCreatorSafe.bind(this);
-    const legacyGenSchemaSafe = this.genSchemaSafe.bind(this);
+    const legacyValidatePaginationObject =
+      this.validatePaginationObject.bind(this);
+    const legacyValidateOptions = this.validateOptions.bind(this);
+    const legacyValidatePaginationInput = this.validatePaginationInput.bind(this);
+    const legacyTupleCreator = this.tupleCreator.bind(this);
+    const legacyGenSchema = this.genSchema.bind(this);
     const legacyBuildSafeBaseQueries = this.buildSafeBaseQueries.bind(this);
     const legacyBuildSafeWhereQuery = this.buildSafeWhereQuery.bind(this);
     const legacySingleTablePaginationSafe =
       this.singleTablePaginationSafe.bind(this);
     const legacyPaginateSafe = this.paginateSafe.bind(this);
+    const legacyProcessFilterCondition = this.processFilterCondition.bind(this);
+    const legacyCollectFilterConditions = this.collectFilterConditions.bind(this);
+    const legacyBuildOrderByQuery = this.buildOrderByQuery.bind(this);
 
-    this.defaultSafeOptions = this.normalizeSafePaginateOptions({
-      ...defaultV210Options,
-      ...safeOptions,
+    this.toError = (error) =>
+      error instanceof Error ? error : new Error(String(error));
+
+    this.assertSupportedV2SafeOptions = (
+      safeOptionsObject = {},
+      path = "safeOptions"
+    ) => {
+      for (const key of Object.keys(safeOptionsObject || {})) {
+        if (!supportedV2SafeOptionKeys.has(key)) {
+          throw new Error(
+            `PagiHelpV2 does not allow ${path}.${key}; use paginateLegacy() for legacy behavior`
+          );
+        }
+      }
+    };
+
+    this.normalizeV2SafeOptions = (
+      safeOptionsObject = {},
+      path = "safeOptions"
+    ) => {
+      this.assertSupportedV2SafeOptions(safeOptionsObject, path);
+
+      return this.normalizeSafePaginateOptions({
+        ...fixedV2SafeOptions,
+        ...defaultV2SafeOptions,
+        validate:
+          safeOptionsObject.validate ?? defaultV2SafeOptions.validate,
+      });
+    };
+
+    this.normalizeV2PaginationObject = (paginationObject = {}) => {
+      const normalizedPaginationObject = {
+        ...(paginationObject || {}),
+      };
+
+      if (normalizedPaginationObject.search === undefined) {
+        normalizedPaginationObject.search = "";
+      }
+
+      return normalizedPaginationObject;
+    };
+
+    this.normalizeV2Option = (option) => {
+      if (!option || typeof option !== "object" || Array.isArray(option)) {
+        return option;
+      }
+
+      return {
+        ...option,
+        searchColumnList:
+          option.searchColumnList === undefined ? [] : option.searchColumnList,
+      };
+    };
+
+    this.normalizeV2Options = (inputOptions = []) => {
+      if (!Array.isArray(inputOptions)) {
+        return inputOptions;
+      }
+
+      return inputOptions.map((option) => this.normalizeV2Option(option));
+    };
+
+    this.filterLegacyValidationWarnings = (validationResult) => ({
+      ...validationResult,
+      warnings: validationResult.warnings.filter(
+        (warning) =>
+          warning !==
+            'paginationObject.search is undefined; current paginate() will search for "%undefined%" when searchColumnList is non-empty' &&
+          warning !== "paginationObject.sort will be mutated by paginate()"
+      ),
     });
 
+    this.defaultSafeOptions = this.normalizeV2SafeOptions(
+      safeOptions,
+      "constructor.safeOptions"
+    );
+
     this.resolveSafeOptions = (overrides = {}) =>
-      this.normalizeSafePaginateOptions({
-        ...this.defaultSafeOptions,
-        ...overrides,
-      });
+      this.normalizeV2SafeOptions(
+        {
+          validate:
+            overrides.validate !== undefined
+              ? overrides.validate
+              : this.defaultSafeOptions.validate,
+          ...overrides,
+        },
+        "safeOptions"
+      );
+
+    this.validatePaginationObject = (paginationObject) =>
+      this.filterLegacyValidationWarnings(
+        legacyValidatePaginationObject(
+          this.normalizeV2PaginationObject(paginationObject)
+        )
+      );
+
+    this.validateOptions = (inputOptions) =>
+      this.filterLegacyValidationWarnings(
+        legacyValidateOptions(this.normalizeV2Options(inputOptions))
+      );
+
+    this.validatePaginationInput = (paginationObject, inputOptions) =>
+      this.filterLegacyValidationWarnings(
+        legacyValidatePaginationInput(
+          this.normalizeV2PaginationObject(paginationObject),
+          this.normalizeV2Options(inputOptions)
+        )
+      );
+
+    this.processFilterCondition = (condition, columnList) => {
+      try {
+        return legacyProcessFilterCondition(condition, columnList);
+      } catch (error) {
+        throw this.toError(error);
+      }
+    };
+
+    this.collectFilterConditions = (filters, columnList) => {
+      try {
+        return legacyCollectFilterConditions(filters, columnList);
+      } catch (error) {
+        throw this.toError(error);
+      }
+    };
+
+    this.buildOrderByQuery = (sort) => {
+      const clonedSort =
+        sort && typeof sort === "object"
+          ? {
+              ...sort,
+              attributes: Array.isArray(sort.attributes)
+                ? [...sort.attributes]
+                : sort.attributes,
+              sorts: Array.isArray(sort.sorts)
+                ? [...sort.sorts]
+                : sort.sorts,
+            }
+          : sort;
+
+      try {
+        return legacyBuildOrderByQuery(clonedSort);
+      } catch (error) {
+        throw this.toError(error);
+      }
+    };
 
     this.tupleCreator = (
       tuple,
       replacements,
       asItIs = false,
       overrideSafeOptions = {}
-    ) =>
-      legacyTupleCreatorSafe(
-        tuple,
-        replacements,
-        asItIs,
-        this.resolveSafeOptions(overrideSafeOptions)
-      );
+    ) => {
+      const operator = tuple[1]?.toUpperCase?.();
+      const value = tuple[2];
+
+      try {
+        this.resolveSafeOptions(overrideSafeOptions);
+        if (
+          Array.isArray(value) &&
+          value.length === 0 &&
+          ["IN", "NOT IN", "! IN"].includes(operator)
+        ) {
+          throw new Error(
+            `${operator} does not accept an empty array in PagiHelpV2`
+          );
+        }
+
+        return legacyTupleCreator(tuple, replacements, asItIs);
+      } catch (error) {
+        throw this.toError(error);
+      }
+    };
 
     this.genSchema = (
       schemaArray,
       replacements,
       asItIs = false,
       overrideSafeOptions = {}
-    ) =>
-      legacyGenSchemaSafe(
-        schemaArray,
-        replacements,
-        asItIs,
-        this.resolveSafeOptions(overrideSafeOptions)
-      );
+    ) => {
+      try {
+        this.resolveSafeOptions(overrideSafeOptions);
+        return legacyGenSchema(schemaArray, replacements, asItIs);
+      } catch (error) {
+        throw this.toError(error);
+      }
+    };
 
     this.buildSingleTableBaseQueries = (
       tableName,
       joinQuery,
       columnList,
       overrideSafeOptions = {}
-    ) =>
-      legacyBuildSafeBaseQueries(
-        tableName,
-        joinQuery,
-        columnList,
-        this.resolveSafeOptions(overrideSafeOptions).countQueryMode
-      );
+    ) => {
+      const safeOptionsObject = this.resolveSafeOptions(overrideSafeOptions);
+
+      try {
+        return legacyBuildSafeBaseQueries(
+          tableName,
+          this.normalizeSafeJoinQuery(joinQuery),
+          columnList,
+          safeOptionsObject.countQueryMode
+        );
+      } catch (error) {
+        throw this.toError(error);
+      }
+    };
 
     this.buildWhereQuery = (
       paginationObject,
@@ -81,48 +250,68 @@ class PagiHelpV210 extends PagiHelp {
       additionalWhereConditions,
       replacements,
       overrideSafeOptions = {}
-    ) =>
-      legacyBuildSafeWhereQuery(
-        paginationObject,
-        searchColumnList,
-        filterConditions,
-        additionalWhereConditions,
-        replacements,
-        this.resolveSafeOptions(overrideSafeOptions)
-      );
+    ) => {
+      try {
+        return legacyBuildSafeWhereQuery(
+          this.normalizeV2PaginationObject(paginationObject),
+          searchColumnList || [],
+          filterConditions || [],
+          additionalWhereConditions || [],
+          replacements,
+          this.resolveSafeOptions(overrideSafeOptions)
+        );
+      } catch (error) {
+        throw this.toError(error);
+      }
+    };
 
     this.singleTablePagination = (
       tableName,
       paginationObject,
-      searchColumnList,
+      searchColumnList = [],
       joinQuery = "",
       columnList = [{ name: "*" }],
       additionalWhereConditions = [],
       overrideSafeOptions = {}
-    ) =>
-      legacySingleTablePaginationSafe(
-        tableName,
-        paginationObject,
-        searchColumnList,
-        joinQuery,
-        columnList,
-        additionalWhereConditions,
-        this.resolveSafeOptions(overrideSafeOptions)
-      );
+    ) => {
+      try {
+        return legacySingleTablePaginationSafe(
+          tableName,
+          this.normalizeV2PaginationObject(paginationObject),
+          searchColumnList || [],
+          this.normalizeSafeJoinQuery(joinQuery),
+          columnList,
+          additionalWhereConditions || [],
+          this.resolveSafeOptions(overrideSafeOptions)
+        );
+      } catch (error) {
+        throw this.toError(error);
+      }
+    };
 
-    this.paginate = (paginationObject, options, overrideSafeOptions = {}) =>
-      legacyPaginateSafe(
-        paginationObject,
-        options,
-        this.resolveSafeOptions(overrideSafeOptions)
-      );
+    this.paginate = (paginationObject, options, overrideSafeOptions = {}) => {
+      try {
+        return legacyPaginateSafe(
+          this.normalizeV2PaginationObject(paginationObject),
+          this.normalizeV2Options(options),
+          this.resolveSafeOptions(overrideSafeOptions)
+        );
+      } catch (error) {
+        throw this.toError(error);
+      }
+    };
 
     this.paginateSafe = this.paginate;
 
-    this.paginateLegacy = (paginationObject, options) =>
-      new PagiHelp({
-        columnNameConverter: this.columnNameConverter,
-      }).paginate(paginationObject, options);
+    this.paginateLegacy = (paginationObject, options) => {
+      try {
+        return new PagiHelp({
+          columnNameConverter: this.columnNameConverter,
+        }).paginate(paginationObject, options);
+      } catch (error) {
+        throw this.toError(error);
+      }
+    };
   }
 }
 

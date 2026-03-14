@@ -5,60 +5,85 @@ declare class PagiHelpV210 extends PagiHelp {
 
   defaultSafeOptions: PagiHelp.ResolvedSafePaginateOptions;
 
+  validatePaginationObject(
+    paginationObject: PagiHelpV210.PaginationInput
+  ): PagiHelp.ValidationResult;
+
+  validateOptions(
+    options: PagiHelpV210.PaginationOption[]
+  ): PagiHelp.ValidationResult;
+
+  validatePaginationInput(
+    paginationObject: PagiHelpV210.PaginationInput,
+    options: PagiHelpV210.PaginationOption[]
+  ): PagiHelp.ValidationResult;
+
   resolveSafeOptions(
-    safeOptions?: PagiHelp.SafePaginateOptions
+    safeOptions?: PagiHelpV210.SafeOptions
   ): PagiHelp.ResolvedSafePaginateOptions;
 
   tupleCreator(
     tuple: PagiHelp.ConditionTuple,
     replacements: unknown[],
     asItIs?: boolean,
-    safeOptions?: PagiHelp.SafePaginateOptions
+    safeOptions?: PagiHelpV210.SafeOptions
   ): string;
 
   genSchema(
     schemaArray: PagiHelp.ConditionInput,
     replacements: unknown[],
     asItIs?: boolean,
-    safeOptions?: PagiHelp.SafePaginateOptions
+    safeOptions?: PagiHelpV210.SafeOptions
   ): string;
+
+  processFilterCondition(
+    condition: PagiHelp.ConditionInput,
+    columnList: PagiHelp.ColumnDescriptor[]
+  ): PagiHelp.ConditionSchema;
+
+  collectFilterConditions(
+    filters: PagiHelp.ConditionInput | undefined,
+    columnList: PagiHelp.ColumnDescriptor[]
+  ): PagiHelp.ConditionSchema;
+
+  buildOrderByQuery(sort: PagiHelp.SortInput): string;
 
   buildSingleTableBaseQueries(
     tableName: string,
     joinQuery: string,
     columnList: string[],
-    safeOptions?: PagiHelp.SafePaginateOptions
+    safeOptions?: PagiHelpV210.SafeOptions
   ): PagiHelp.BaseQueries;
 
   buildWhereQuery(
-    paginationObject: PagiHelp.PaginationInput,
-    searchColumnList: string[],
+    paginationObject: PagiHelpV210.PaginationInput,
+    searchColumnList: string[] | undefined,
     filterConditions: PagiHelp.ConditionSchema,
     additionalWhereConditions: PagiHelp.ConditionInput | [],
     replacements: unknown[],
-    safeOptions?: PagiHelp.SafePaginateOptions
+    safeOptions?: PagiHelpV210.SafeOptions
   ): string;
 
   singleTablePagination(
     tableName: string,
-    paginationObject: PagiHelp.PaginationInput,
-    searchColumnList: PagiHelp.SearchColumnDescriptor[],
+    paginationObject: PagiHelpV210.PaginationInput,
+    searchColumnList?: PagiHelp.SearchColumnDescriptor[],
     joinQuery?: string,
     columnList?: PagiHelp.ColumnDescriptor[],
     additionalWhereConditions?: PagiHelp.ConditionInput | [],
-    safeOptions?: PagiHelp.SafePaginateOptions
+    safeOptions?: PagiHelpV210.SafeOptions
   ): PagiHelp.PaginationResult;
 
   paginate(
-    paginationObject: PagiHelp.PaginationInput,
-    options: PagiHelp.PaginationOption[],
-    safeOptions?: PagiHelp.SafePaginateOptions
+    paginationObject: PagiHelpV210.PaginationInput,
+    options: PagiHelpV210.PaginationOption[],
+    safeOptions?: PagiHelpV210.SafeOptions
   ): PagiHelp.PaginationResult;
 
   paginateSafe(
-    paginationObject: PagiHelp.PaginationInput,
-    options: PagiHelp.PaginationOption[],
-    safeOptions?: PagiHelp.SafePaginateOptions
+    paginationObject: PagiHelpV210.PaginationInput,
+    options: PagiHelpV210.PaginationOption[],
+    safeOptions?: PagiHelpV210.SafeOptions
   ): PagiHelp.PaginationResult;
 
   paginateLegacy(
@@ -68,8 +93,21 @@ declare class PagiHelpV210 extends PagiHelp {
 }
 
 declare namespace PagiHelpV210 {
+  interface SafeOptions {
+    validate?: boolean;
+  }
+
+  interface PaginationInput extends Omit<PagiHelp.PaginationInput, "search"> {
+    search?: string;
+  }
+
+  interface PaginationOption
+    extends Omit<PagiHelp.PaginationOption, "searchColumnList"> {
+    searchColumnList?: PagiHelp.SearchColumnDescriptor[];
+  }
+
   interface ConstructorOptions extends PagiHelp.ConstructorOptions {
-    safeOptions?: PagiHelp.SafePaginateOptions;
+    safeOptions?: SafeOptions;
   }
 }
 

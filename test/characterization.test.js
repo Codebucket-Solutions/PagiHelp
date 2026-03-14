@@ -1196,7 +1196,7 @@ test("paginateSafe supports static empty IN handling and select countQuery mode"
   });
 });
 
-test("legacy export exposes the separate 2.1.0 class without changing the default export", () => {
+test("legacy export exposes the separate v2 class without changing the default export", () => {
   assert.equal(typeof PagiHelp, "function");
   assert.equal(PagiHelp.PagiHelpLegacy, PagiHelp);
   assert.equal(PagiHelp.PagiHelpV210, PagiHelpV210);
@@ -1204,7 +1204,7 @@ test("legacy export exposes the separate 2.1.0 class without changing the defaul
   assert.notEqual(PagiHelp, PagiHelpV210);
 });
 
-test("2.1.0 paginate uses the safe contract by default while leaving legacy paginate unchanged", () => {
+test("v2 paginate uses the improved contract by default while leaving legacy paginate unchanged", () => {
   const legacy = new PagiHelp();
   const modern = new PagiHelpV210();
   const paginationObject = {
@@ -1258,7 +1258,7 @@ test("2.1.0 paginate uses the safe contract by default while leaving legacy pagi
   assert.deepStrictEqual(legacyInput.sort.sorts, ["ASC", "DESC"]);
 });
 
-test("2.1.0 paginate rejects legacy search aliases by default and can fall back per call", () => {
+test("v2 rejects search aliases in searchColumnList", () => {
   const modern = new PagiHelpV210();
   const paginationObject = {
     search: "mail",
@@ -1278,50 +1278,83 @@ test("2.1.0 paginate rejects legacy search aliases by default and can fall back 
     () => runQuietly(() => modern.paginate(clone(paginationObject), clone(options))),
     "options[0].searchColumnList[0].alias is not supported in searchColumnList"
   );
-
-  const legacyCompatResult = runQuietly(() =>
-    modern.paginate(clone(paginationObject), clone(options), {
-      rejectSearchAliases: false,
-      countQueryMode: "select",
-      validate: false,
-    })
-  );
-
-  assert.equal(
-    legacyCompatResult.countQuery,
-    "SELECT id AS id,email AS email FROM `users` WHERE ( email AS email LIKE ? )"
-  );
-  assert.deepStrictEqual(legacyCompatResult.replacements, ["%mail%"]);
 });
 
-test("2.1.0 singleTablePagination is quiet and omits the dangling WHERE by default", () => {
+test("v2 singleTablePagination is quiet, normalizes joinQuery, and omits the dangling WHERE", () => {
   const modern = new PagiHelpV210();
   const { result, logs } = captureLogs(() =>
     modern.singleTablePagination(
       "events",
       { search: "" },
-      [],
-      "",
+      undefined,
+      "e",
       [{ name: "id", alias: "id" }]
     )
   );
 
   assert.deepStrictEqual(result, {
-    countQuery: "SELECT COUNT(*) AS countValue  FROM `events`",
-    totalCountQuery: "SELECT COUNT(*) AS countValue  FROM `events`",
-    query: "SELECT id AS id FROM `events`",
+    countQuery: "SELECT COUNT(*) AS countValue  FROM `events` e",
+    totalCountQuery: "SELECT COUNT(*) AS countValue  FROM `events` e",
+    query: "SELECT id AS id FROM `events` e",
     replacements: [],
   });
   assert.deepStrictEqual(logs, []);
 });
 
-test("2.1.0 constructor safeOptions become the class default and paginateLegacy still delegates to 1.3.0 behavior", () => {
-  const modern = new PagiHelpV210({
-    safeOptions: {
-      countQueryMode: "select",
-      emptyInStrategy: "static",
+test("v2 treats missing search and searchColumnList as empty values without legacy warnings", () => {
+  const modern = new PagiHelpV210();
+  const paginationObject = {
+    sort: {
+      attributes: ["created_at"],
+      sorts: ["asc"],
     },
+    pageNo: 1,
+    itemsPerPage: 5,
+  };
+  const options = [
+    {
+      tableName: "users",
+      columnList: [
+        { name: "id", alias: "id" },
+        { name: "created_at", alias: "created_at" },
+      ],
+    },
+  ];
+
+  const validation = modern.validatePaginationInput(
+    clone(paginationObject),
+    clone(options)
+  );
+  const result = runQuietly(() =>
+    modern.paginate(clone(paginationObject), clone(options))
+  );
+
+  assert.deepStrictEqual(validation, {
+    valid: true,
+    errors: [],
+    warnings: [],
   });
+  assert.deepStrictEqual(result, {
+    countQuery: "SELECT COUNT(*) AS countValue  FROM `users`",
+    totalCountQuery: "SELECT COUNT(*) AS countValue  FROM `users`",
+    query:
+      "SELECT id AS id,created_at AS created_at FROM `users` ORDER BY `created_at`ASC,`id`DESC LIMIT ?,?",
+    replacements: [0, 5],
+  });
+});
+
+test("v2 rejects legacy safe overrides and keeps paginateLegacy as the explicit escape hatch", () => {
+  expectThrowMessage(
+    () =>
+      new PagiHelpV210({
+        safeOptions: {
+          countQueryMode: "select",
+        },
+      }),
+    "PagiHelpV2 does not allow constructor.safeOptions.countQueryMode; use paginateLegacy() for legacy behavior"
+  );
+
+  const modern = new PagiHelpV210();
   const paginationObject = {
     search: "",
     filters: ["status", "IN", []],
@@ -1333,23 +1366,35 @@ test("2.1.0 constructor safeOptions become the class default and paginateLegacy 
         { name: "id", alias: "id" },
         { name: "status", alias: "status" },
       ],
-      searchColumnList: [],
     },
   ];
 
-  const safeResult = runQuietly(() =>
-    modern.paginate(clone(paginationObject), clone(options))
-  );
-  const legacyResult = runQuietly(() =>
-    modern.paginateLegacy(clone(paginationObject), clone(options))
+  expectThrowMessage(
+    () =>
+      runQuietly(() =>
+        modern.paginate(clone(paginationObject), clone(options), {
+          countQueryMode: "select",
+        })
+      ),
+    "PagiHelpV2 does not allow safeOptions.countQueryMode; use paginateLegacy() for legacy behavior"
   );
 
-  assert.deepStrictEqual(safeResult, {
-    countQuery: "SELECT id AS id,status AS status FROM `events` WHERE (0 = 1)",
-    totalCountQuery: "SELECT COUNT(*) AS countValue  FROM `events` WHERE (0 = 1)",
-    query: "SELECT id AS id,status AS status FROM `events` WHERE (0 = 1)",
-    replacements: [],
-  });
+  const legacyResult = runQuietly(() =>
+    modern.paginateLegacy(
+      { search: "", filters: ["status", "IN", []] },
+      [
+        {
+          tableName: "events",
+          columnList: [
+            { name: "id", alias: "id" },
+            { name: "status", alias: "status" },
+          ],
+          searchColumnList: [],
+        },
+      ]
+    )
+  );
+
   assert.deepStrictEqual(legacyResult, {
     countQuery:
       "SELECT id AS id,status AS status FROM `events` WHERE (status IN ())  ",
@@ -1359,6 +1404,40 @@ test("2.1.0 constructor safeOptions become the class default and paginateLegacy 
       "SELECT id AS id,status AS status FROM `events` WHERE (status IN ())  ",
     replacements: [],
   });
+});
+
+test("v2 helper failures are surfaced as Error objects and helper sorts do not mutate input", () => {
+  const modern = new PagiHelpV210();
+  const sort = {
+    attributes: ["created_at"],
+    sorts: ["desc"],
+  };
+
+  expectThrowMessage(
+    () =>
+      modern.collectFilterConditions([["missing", "=", 1]], [
+        { name: "id", alias: "id" },
+      ]),
+    "Invalid filter field: missing"
+  );
+
+  expectThrowMessage(
+    () => modern.tupleCreator(["id", "BETWEEN", [1, 2]], []),
+    "Invalid Operator"
+  );
+
+  expectThrowMessage(
+    () =>
+      modern.buildOrderByQuery({
+        attributes: ["id"],
+        sorts: ["sideways"],
+      }),
+    "INVALID SORT VALUE"
+  );
+
+  assert.equal(modern.buildOrderByQuery(sort), "ORDER BY `created_at`DESC");
+  assert.deepStrictEqual(sort.attributes, ["created_at"]);
+  assert.deepStrictEqual(sort.sorts, ["desc"]);
 });
 
 test("invalid filter fields, operators, and sort values throw the current string errors", () => {

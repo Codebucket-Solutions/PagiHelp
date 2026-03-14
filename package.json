@@ -1,6 +1,6 @@
 {
   "name": "pagi-help",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Pagination Api Helper For Mysql",
   "main": "index.js",
   "types": "index.d.ts",
