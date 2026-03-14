@@ -1,12 +1,12 @@
 # PagiHelp v2 Baseline
 
-This file captures the current `v2` contract shipped by `v2.js` at package version `2.2.1`.
+This file captures the current `v2` contract shipped by `v2.js` at package version `2.3.0`.
 
-The `v2` API is grounded on the old `1.3.0` safe path, but it is now a hardened contract rather than a compatibility layer with legacy toggle switches.
+`v2` is grounded on the old `1.3.0` safe path, but it is now a hardened contract with dialect-aware SQL rendering.
 
 ## Export Map
 
-Package `2.2.1` ships two explicit class contracts:
+Package `2.3.0` ships two explicit class contracts:
 
 - `require("pagi-help")` -> legacy `PagiHelp` default export from `index.js`
 - `require("pagi-help").PagiHelpLegacy` -> same legacy class
@@ -17,14 +17,13 @@ Package `2.2.1` ships two explicit class contracts:
 Compatibility requirement:
 
 - the default export must remain legacy unless there is an intentional breaking change
-- the `v2` subpath must remain the clean entrypoint for new code
+- the `v2` subpath must remain the entrypoint for new code
 
 ## Constructor
 
-`PagiHelpV2` accepts the legacy constructor option plus an optional `validate` flag:
-
 ```js
 new PagiHelpV2({
+  dialect: "mysql",
   columnNameConverter: (name) => name,
   safeOptions: {
     validate: true,
@@ -34,9 +33,38 @@ new PagiHelpV2({
 
 Constructor behavior:
 
+- `dialect` may be `"mysql"` or `"postgres"`
+- omitted `dialect` defaults to `"mysql"`
 - `columnNameConverter` is passed through to the legacy base class
 - only `safeOptions.validate` is supported
-- legacy compatibility switches are not supported on `v2`
+- legacy compatibility switches are rejected on `v2`
+
+## Dialect Contract
+
+Legacy stays MySQL-only. Dialect support applies to `v2` only.
+
+`v2` MySQL:
+
+- keeps the current MySQL renderer
+- uses backticks for generated table and `ORDER BY` identifiers
+- keeps MySQL-specific operators as MySQL SQL
+- paginates with `LIMIT ?,?`
+
+`v2` PostgreSQL:
+
+- switches generated table and `ORDER BY` identifiers to double quotes
+- paginates with `LIMIT ? OFFSET ?`
+- changes pagination replacement order to `[limit, offset]`
+- translates MySQL-only validated operators into PostgreSQL SQL:
+  - `JSON_CONTAINS` -> `field::jsonb @> ?::jsonb`
+  - `JSON_OVERLAPS` -> emulated `jsonb` overlap SQL
+  - `FIND_IN_SET` -> `array_position(string_to_array(...), ?::text) IS NOT NULL`
+  - `RLIKE` -> `~`
+  - `MEMBER OF` -> `?::jsonb @> to_jsonb(field)`
+  - `! IN` -> `NOT IN`
+- uses PostgreSQL-safe `IS NULL`, `IS NOT NULL`, `IS DISTINCT FROM`, and `IS NOT DISTINCT FROM` rendering
+
+Raw `statement`, `joinQuery`, and `additionalWhereConditions` fragments are never translated. They must already match the chosen dialect.
 
 ## Method Contract
 
@@ -44,7 +72,7 @@ Constructor behavior:
 
 - `validatePaginationObject()`, `validateOptions()`, and `validatePaginationInput()` normalize omitted `search` and `searchColumnList` before validating and suppress legacy-only warnings
 - `tupleCreator()`, `processFilterCondition()`, `collectFilterConditions()`, and `buildOrderByQuery()` surface `Error` objects instead of legacy string throws
-- `buildSingleTableBaseQueries()` always builds aggregate `countQuery`
+- `buildSafeBaseQueries()` and `buildSingleTableBaseQueries()` are dialect-aware and always build aggregate `countQuery`
 - `buildWhereQuery()` treats missing `search` as `""` and missing `searchColumnList` as `[]`
 - `singleTablePagination()` uses the safe single-table path, normalizes `joinQuery`, and never logs replacements
 - `paginate()` uses the safe union path with the hardened rules below
@@ -83,7 +111,7 @@ Only one `safeOptions` key is supported on `v2`:
 
 - `validate`
 
-If a caller tries to pass legacy compatibility keys like `countQueryMode`, `emptyInStrategy`, or `rejectSearchAliases`, `v2` should throw an `Error` that points them to `paginateLegacy()`.
+If a caller tries to pass legacy compatibility keys like `countQueryMode`, `emptyInStrategy`, or `rejectSearchAliases`, `v2` must throw an `Error` that points them to `paginateLegacy()`.
 
 ## What Should Not Change Accidentally
 
@@ -91,16 +119,19 @@ These are `v2` contract points and should be treated as compatibility-sensitive:
 
 - `require("pagi-help")` must not start returning `PagiHelpV2`
 - `require("pagi-help/v2")` must keep returning the hardened `v2` class
-- `PagiHelpV2#paginate()` must remain hardened-by-default
+- `PagiHelpV2#paginate()` must remain hardened by default
 - `PagiHelpV2#paginateLegacy()` must remain the explicit legacy escape hatch
 - the return shape must remain `{ countQuery, totalCountQuery, query, replacements }`
 - omitted `search` and omitted `searchColumnList` must keep normalizing safely
-- `Error` objects must keep replacing legacy string throws on the `v2` path
+- MySQL and PostgreSQL pagination clauses must keep their dialect-specific ordering
+- PostgreSQL operator translations must stay stable unless intentionally versioned
 
 ## Reference Files
 
-- `v2.js` contains the runtime wrapper for current `v2`
+- `v2.js` contains the current hardened `v2` class
+- `v2/dialects/mysql.js` contains the MySQL SQL renderer for `v2`
+- `v2/dialects/postgres.js` contains the PostgreSQL SQL renderer for `v2`
 - `v2.d.ts` contains the subpath declaration file
 - `index.js` still contains the legacy default export
-- `index.d.ts` exposes the named `PagiHelpV2`, `PagiHelpV210`, and `PagiHelpLegacy` exports
-- `test/characterization.test.js` contains the `v2` and legacy regression coverage
+- `test/mysql.characterization.test.js` covers legacy plus MySQL `v2`
+- `test/postgres.characterization.test.js` covers PostgreSQL `v2`

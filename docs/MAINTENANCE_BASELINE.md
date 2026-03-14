@@ -1,11 +1,12 @@
 # PagiHelp Legacy Maintenance Baseline
 
-This file captures the legacy default-export behavior preserved in `index.js` at package version `2.2.1`. It remains the compatibility reference for `require("pagi-help")` and `PagiHelpLegacy`.
+This file captures the legacy default-export behavior preserved in `index.js` at package version `2.3.0`. It remains the compatibility reference for `require("pagi-help")` and `PagiHelpLegacy`.
 
 ## Repository shape
 
 - `index.js` contains the legacy default-export runtime implementation.
 - `v2.js` contains the current hardened `v2` class built on the `1.3.0` safe path.
+- `v2/dialects/mysql.js` and `v2/dialects/postgres.js` contain the dialect-specific SQL renderers for `v2`.
 - `index.d.ts` provides machine-readable API shapes for editors and AI agents.
 - `v2.d.ts` provides the subpath declaration file for `require("pagi-help/v2")`.
 - `AGENTS.md` provides repo-specific usage and change instructions for AI agents.
@@ -18,7 +19,8 @@ This file captures the legacy default-export behavior preserved in `index.js` at
 - `docs/COMMIT_HISTORY_NOTES.md` traces every meaningful commit and maps it to current regression coverage.
 - `docs/CONSUMER_USAGE_AUDIT.md` records real downstream usage patterns from an audited application and the invariants they depend on.
 - `docs/CONSUMER_USAGE_AUDIT_XLEY.md` records additional downstream usage patterns from a second audited application.
-- `test/characterization.test.js` records the current core behavior that should stay stable unless a change is intentional.
+- `test/mysql.characterization.test.js` records the legacy and MySQL-side `v2` behavior that should stay stable unless a change is intentional.
+- `test/postgres.characterization.test.js` records the PostgreSQL-side `v2` behavior.
 
 ## Exported API
 

@@ -1,7 +1,7 @@
 {
   "name": "pagi-help",
-  "version": "2.2.1",
-  "description": "Pagination Api Helper For Mysql",
+  "version": "2.3.0",
+  "description": "Pagination API helper for MySQL and PostgreSQL",
   "main": "index.js",
   "types": "index.d.ts",
   "scripts": {
@@ -16,6 +16,7 @@
     "index.d.ts",
     "v2.js",
     "v2.d.ts",
+    "v2/",
     "README.md",
     "LICENSE",
     "diagram.png",
@@ -26,6 +27,7 @@
   "keywords": [
     "pagination",
     "mysql",
+    "postgres",
     "page",
     "search",
     "util"

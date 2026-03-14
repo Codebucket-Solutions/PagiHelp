@@ -1,6 +1,6 @@
 # Legacy Default Export Archive
 
-This folder preserves the guidance for the legacy default export that is still shipped by `pagi-help@2.2.1`.
+This folder preserves the guidance for the legacy default export that is still shipped by `pagi-help@2.3.0`.
 
 Import forms:
 
@@ -10,6 +10,8 @@ const { PagiHelpLegacy } = require("pagi-help");
 ```
 
 Use this path only when code intentionally depends on the legacy SQL contract.
+
+The legacy default export remains MySQL-only. PostgreSQL support exists only on `require("pagi-help/v2")`.
 
 Key legacy behaviors:
 
@@ -29,4 +31,4 @@ Authoritative references:
 - `docs/legacy/AGENT_USAGE_1.3.0.md`
 - `docs/CONSUMER_USAGE_AUDIT.md`
 - `docs/CONSUMER_USAGE_AUDIT_XLEY.md`
-- `test/characterization.test.js`
+- `test/mysql.characterization.test.js`

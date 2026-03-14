@@ -1,6 +1,8 @@
 const PagiHelpV2 = require("../v2");
 
-const pagiHelp = new PagiHelpV2();
+const pagiHelp = new PagiHelpV2({
+  dialect: "mysql",
+});
 
 const paginationObject = {
   search: "Active",

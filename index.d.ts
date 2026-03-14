@@ -211,6 +211,8 @@ declare class PagiHelp {
 declare class PagiHelpV210 extends PagiHelp {
   constructor(options?: PagiHelpV210.ConstructorOptions);
 
+  dialect: PagiHelpV210.Dialect;
+
   defaultSafeOptions: PagiHelp.ResolvedSafePaginateOptions;
 
   validatePaginationObject(
@@ -310,6 +312,8 @@ declare namespace PagiHelp {
   }
 
   type SortDirection = "ASC" | "DESC" | "asc" | "desc";
+
+  type DialectName = "mysql" | "postgres";
 
   type EmptyInStrategy = "throw" | "static" | "legacy";
 
@@ -520,6 +524,8 @@ declare namespace PagiHelp {
 }
 
 declare namespace PagiHelpV210 {
+  type Dialect = PagiHelp.DialectName;
+
   interface SafeOptions {
     validate?: boolean;
   }
@@ -534,6 +540,12 @@ declare namespace PagiHelpV210 {
   }
 
   interface ConstructorOptions extends PagiHelp.ConstructorOptions {
+    /**
+     * SQL dialect for the hardened `v2` path.
+     *
+     * Default: `mysql`
+     */
+    dialect?: Dialect;
     safeOptions?: SafeOptions;
   }
 }

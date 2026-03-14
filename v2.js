@@ -1,5 +1,8 @@
 const PagiHelp = require("./index");
 
+const mysqlDialect = require("./v2/dialects/mysql");
+const postgresDialect = require("./v2/dialects/postgres");
+
 const fixedV2SafeOptions = Object.freeze({
   cloneSort: true,
   cloneOptions: true,
@@ -16,28 +19,67 @@ const defaultV2SafeOptions = Object.freeze({
 });
 
 const supportedV2SafeOptionKeys = new Set(["validate"]);
+const supportedDialects = Object.freeze({
+  mysql: mysqlDialect,
+  postgres: postgresDialect,
+});
+const allowedOperators = new Set([
+  ">",
+  ">=",
+  "<",
+  "<=",
+  "=",
+  "!=",
+  "<>",
+  "IN",
+  "NOT IN",
+  "! IN",
+  "IS",
+  "IS NOT",
+  "LIKE",
+  "RLIKE",
+  "MEMBER OF",
+  "JSON_CONTAINS",
+  "JSON_OVERLAPS",
+  "FIND_IN_SET",
+]);
+const allowedSorts = new Set(["ASC", "DESC"]);
 
 class PagiHelpV210 extends PagiHelp {
   constructor(options = {}) {
-    const { safeOptions, ...legacyOptions } = options || {};
+    const { safeOptions, dialect, ...legacyOptions } = options || {};
     super(legacyOptions);
+
     const legacyValidatePaginationObject =
       this.validatePaginationObject.bind(this);
     const legacyValidateOptions = this.validateOptions.bind(this);
     const legacyValidatePaginationInput = this.validatePaginationInput.bind(this);
-    const legacyTupleCreator = this.tupleCreator.bind(this);
     const legacyGenSchema = this.genSchema.bind(this);
-    const legacyBuildSafeBaseQueries = this.buildSafeBaseQueries.bind(this);
     const legacyBuildSafeWhereQuery = this.buildSafeWhereQuery.bind(this);
     const legacySingleTablePaginationSafe =
       this.singleTablePaginationSafe.bind(this);
     const legacyPaginateSafe = this.paginateSafe.bind(this);
     const legacyProcessFilterCondition = this.processFilterCondition.bind(this);
     const legacyCollectFilterConditions = this.collectFilterConditions.bind(this);
-    const legacyBuildOrderByQuery = this.buildOrderByQuery.bind(this);
 
     this.toError = (error) =>
       error instanceof Error ? error : new Error(String(error));
+
+    this.normalizeDialect = (value = "mysql", path = "dialect") => {
+      if (typeof value !== "string" || value.trim() === "") {
+        throw new Error(`${path} must be "mysql" or "postgres"`);
+      }
+
+      const normalizedDialect = value.toLowerCase();
+      if (!supportedDialects[normalizedDialect]) {
+        throw new Error(`${path} must be "mysql" or "postgres"`);
+      }
+
+      return normalizedDialect;
+    };
+
+    this.dialect = this.normalizeDialect(dialect || "mysql", "constructor.dialect");
+    this.dialectAdapter = supportedDialects[this.dialect];
 
     this.assertSupportedV2SafeOptions = (
       safeOptionsObject = {},
@@ -176,7 +218,28 @@ class PagiHelpV210 extends PagiHelp {
           : sort;
 
       try {
-        return legacyBuildOrderByQuery(clonedSort);
+        let orderByQuery = "ORDER BY ";
+
+        for (let index = 0; index < clonedSort.sorts.length; index += 1) {
+          const normalizedSort = clonedSort.sorts[index].toUpperCase();
+          if (!allowedSorts.has(normalizedSort)) {
+            throw new Error("INVALID SORT VALUE");
+          }
+          clonedSort.sorts[index] = normalizedSort;
+        }
+
+        for (let index = 0; index < clonedSort.attributes.length; index += 1) {
+          const convertedAttribute = this.columnNameConverter(
+            clonedSort.attributes[index]
+          );
+
+          orderByQuery +=
+            this.dialectAdapter.quoteIdentifier(convertedAttribute) +
+            clonedSort.sorts[index] +
+            ",";
+        }
+
+        return orderByQuery.slice(0, -1);
       } catch (error) {
         throw this.toError(error);
       }
@@ -193,6 +256,11 @@ class PagiHelpV210 extends PagiHelp {
 
       try {
         this.resolveSafeOptions(overrideSafeOptions);
+
+        if (!asItIs && (!operator || !allowedOperators.has(operator))) {
+          throw new Error("Invalid Operator");
+        }
+
         if (
           Array.isArray(value) &&
           value.length === 0 &&
@@ -203,7 +271,7 @@ class PagiHelpV210 extends PagiHelp {
           );
         }
 
-        return legacyTupleCreator(tuple, replacements, asItIs);
+        return this.dialectAdapter.buildTuple(tuple, replacements, asItIs);
       } catch (error) {
         throw this.toError(error);
       }
@@ -223,6 +291,24 @@ class PagiHelpV210 extends PagiHelp {
       }
     };
 
+    this.buildSafeBaseQueries = (
+      tableName,
+      joinQuery,
+      columnList,
+      countQueryMode = "aggregate"
+    ) => {
+      try {
+        return this.dialectAdapter.buildBaseQueries(
+          tableName,
+          joinQuery,
+          columnList,
+          countQueryMode
+        );
+      } catch (error) {
+        throw this.toError(error);
+      }
+    };
+
     this.buildSingleTableBaseQueries = (
       tableName,
       joinQuery,
@@ -232,7 +318,7 @@ class PagiHelpV210 extends PagiHelp {
       const safeOptionsObject = this.resolveSafeOptions(overrideSafeOptions);
 
       try {
-        return legacyBuildSafeBaseQueries(
+        return this.buildSafeBaseQueries(
           tableName,
           this.normalizeSafeJoinQuery(joinQuery),
           columnList,
@@ -259,6 +345,18 @@ class PagiHelpV210 extends PagiHelp {
           additionalWhereConditions || [],
           replacements,
           this.resolveSafeOptions(overrideSafeOptions)
+        );
+      } catch (error) {
+        throw this.toError(error);
+      }
+    };
+
+    this.applyPagination = (query, paginationObject, replacements) => {
+      try {
+        return this.dialectAdapter.applyPagination(
+          query,
+          paginationObject,
+          replacements
         );
       } catch (error) {
         throw this.toError(error);

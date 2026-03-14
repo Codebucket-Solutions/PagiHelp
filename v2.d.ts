@@ -3,6 +3,8 @@ import PagiHelp = require("./index");
 declare class PagiHelpV210 extends PagiHelp {
   constructor(options?: PagiHelpV210.ConstructorOptions);
 
+  dialect: PagiHelpV210.Dialect;
+
   defaultSafeOptions: PagiHelp.ResolvedSafePaginateOptions;
 
   validatePaginationObject(
@@ -93,6 +95,8 @@ declare class PagiHelpV210 extends PagiHelp {
 }
 
 declare namespace PagiHelpV210 {
+  type Dialect = "mysql" | "postgres";
+
   interface SafeOptions {
     validate?: boolean;
   }
@@ -107,6 +111,15 @@ declare namespace PagiHelpV210 {
   }
 
   interface ConstructorOptions extends PagiHelp.ConstructorOptions {
+    /**
+     * SQL dialect for the hardened `v2` path.
+     *
+     * - `mysql` keeps the current MySQL SQL renderer
+     * - `postgres` switches `FROM`, `ORDER BY`, operators, and pagination to PostgreSQL SQL
+     *
+     * Default: `mysql`
+     */
+    dialect?: Dialect;
     safeOptions?: SafeOptions;
   }
 }

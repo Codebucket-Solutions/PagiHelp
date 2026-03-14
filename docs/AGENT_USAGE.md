@@ -1,89 +1,68 @@
 # Agent Usage Guide
 
-This file is the agent-facing quick reference for `pagi-help@2.2.1`.
+This file is the agent-facing quick reference for `pagi-help@2.3.0`.
 
-The package ships two explicit entrypoints:
+## Entry Points
 
-- `require("pagi-help/v2")` or `require("pagi-help").PagiHelpV2`: current hardened `v2` class
+- `require("pagi-help/v2")` or `require("pagi-help").PagiHelpV2`: current hardened API
 - `require("pagi-help")`: frozen legacy default export
 
-## Choose The Right Entry Point
-
-Use `PagiHelpV2` for:
-
-- new integrations
-- AI-generated code
-- code that wants aggregate `countQuery`
-- code that should avoid dangling `WHERE`, `%undefined%`, sort mutation, raw string throws, and missing `searchColumnList` crashes
-
-Use the legacy default export only for:
-
-- existing applications that already import `pagi-help`
-- call sites that depend on the exact legacy SQL shape
-- consumer code that still treats `countQuery` as a row-select query
-
-Do not switch an existing legacy import to `v2` unless the caller is intentionally migrating.
-
-## Import Patterns
-
-Preferred:
-
-```js
-const PagiHelpV2 = require("pagi-help/v2");
-```
-
-Also supported:
-
-```js
-const { PagiHelpV2, PagiHelpV210 } = require("pagi-help");
-```
-
-Legacy:
-
-```js
-const PagiHelp = require("pagi-help");
-const { PagiHelpLegacy } = require("pagi-help");
-```
+Use `v2` for new code. Keep the legacy export only for intentionally compatibility-bound MySQL integrations.
 
 ## Constructor
 
-Shared constructor option:
-
 ```js
 const pagiHelp = new PagiHelpV2({
+  dialect: "mysql", // default
   columnNameConverter: (name) => name,
-});
-```
-
-`columnNameConverter` is applied when rendering selected columns and `ORDER BY` fields.
-
-`v2` also accepts one optional safe flag:
-
-```js
-const pagiHelp = new PagiHelpV2({
   safeOptions: {
     validate: true,
   },
 });
 ```
 
-`validate` is the only supported `safeOptions` key on `v2`.
+Rules:
+
+- `dialect` may be `"mysql"` or `"postgres"`
+- omitted `dialect` means `"mysql"`
+- `safeOptions.validate` is the only supported `safeOptions` key
+- legacy compatibility keys like `countQueryMode` are rejected on `v2`
+- the legacy default export does not support PostgreSQL mode
+
+## Dialect Rules
+
+When the target database is PostgreSQL, make the dialect explicit:
+
+```js
+const pagiHelp = new PagiHelpV2({
+  dialect: "postgres",
+});
+```
+
+Important differences:
+
+- MySQL pagination: `LIMIT ?,?`, replacements `[offset, limit]`
+- PostgreSQL pagination: `LIMIT ? OFFSET ?`, replacements `[limit, offset]`
+- MySQL-generated table and `ORDER BY` identifiers use backticks
+- PostgreSQL-generated table and `ORDER BY` identifiers use double quotes
+- PostgreSQL raw `statement` and `joinQuery` fragments must use PostgreSQL SQL, not MySQL-only functions like `IF()`
+
+PostgreSQL operator translations on `v2`:
+
+- `JSON_CONTAINS` -> `field::jsonb @> ?::jsonb`
+- `JSON_OVERLAPS` -> emulated `jsonb` overlap SQL
+- `FIND_IN_SET` -> `array_position(string_to_array(...), ?::text) IS NOT NULL`
+- `RLIKE` -> `~`
+- `MEMBER OF` -> `?::jsonb @> to_jsonb(field)`
+- `! IN` -> `NOT IN`
 
 ## Main API
 
-`v2`:
-
 ```js
 const result = pagiHelp.paginate(paginationObject, options);
 ```
 
-Legacy:
-
-```js
-const result = pagiHelp.paginate(paginationObject, options);
-```
-
-Return shape stays the same in both classes:
+Return shape:
 
 ```js
 {
@@ -98,101 +77,45 @@ Important semantics:
 
 - `v2` `countQuery` is aggregate
 - legacy `countQuery` is row-select
-- `totalCountQuery` remains available in both paths
-- `query` is the data query with optional `ORDER BY` and `LIMIT`
-
-## Recommended Execution Pattern
-
-For `v2`, use the aggregate count query directly:
-
-```js
-const queries = pagiHelp.paginate(paginationObject, options);
-
-const totalCountRows = await sequelize.query(queries.countQuery, {
-  replacements: queries.replacements,
-  type: QueryTypes.SELECT,
-});
-
-const data = await sequelize.query(queries.query, {
-  replacements: queries.replacements,
-  type: QueryTypes.SELECT,
-});
-```
-
-For legacy integrations, prefer `totalCountQuery` for actual totals because legacy `countQuery` is not aggregate.
+- `query` is the data query
+- `totalCountQuery` remains aggregate in both paths
 
 ## `v2` Contract
-
-`PagiHelpV2#paginate()` is built on the old safe path, but the behavior is now fixed rather than compatibility-tunable.
 
 `v2`:
 
 - clones caller sort arrays
-- clones option arrays before `filler()` inserts `(NULL)` padding
-- normalizes `joinQuery` to include leading whitespace
+- clones options before `filler()` inserts `(NULL)` union padding
+- normalizes `joinQuery`
 - coerces missing `search` to `""`
 - treats missing `searchColumnList` as `[]`
 - omits empty `WHERE`
 - rejects `searchColumnList.alias`
 - rejects empty `IN` arrays
-- returns aggregate `countQuery`
 - validates before generating SQL by default
 - avoids the legacy `console.log(replacements)` side effect
-- throws `Error` objects instead of string throws
+- throws `Error` objects instead of legacy string throws
 
-## `v2` Overrides
+## `columnList`
 
-Per-call overrides:
-
-```js
-const queries = pagiHelp.paginate(paginationObject, options, {
-  validate: true,
-});
-```
-
-That is the only supported override key.
-
-If the caller needs old `countQueryMode`, `emptyInStrategy`, or similar legacy toggles, use the legacy export or call:
-
-```js
-const legacyQueries = pagiHelp.paginateLegacy(paginationObject, options);
-```
-
-## `columnList` Shapes
-
-`columnList` defines the selected output columns for each branch.
-
-Plain column:
+Supported shapes:
 
 ```js
 { name: "campaign_id", alias: "id" }
-```
-
-Prefixed column:
-
-```js
 { name: "created_date", prefix: "l", alias: "createdDate" }
-```
-
-Statement column:
-
-```js
-{
-  statement: '(SELECT IF(l.assigned_to="1","Yes","No"))',
-  alias: "assignedToMe",
-}
+{ statement: "COUNT(*)", alias: "countValue" }
 ```
 
 Rules:
 
 - use exactly one of `name` or `statement`
 - `alias` is strongly recommended and effectively required for filters, sorts, and unions
-- in practice, include an `id` alias somewhere in `columnList`
-- `columnNameConverter` applies to `name`, not to `statement`
+- include alias `id` somewhere in each branch
+- `statement` is emitted verbatim, so it must match the chosen dialect
 
-## `searchColumnList` Shapes
+## `searchColumnList`
 
-Supported search descriptors:
+Supported shapes:
 
 ```js
 { name: "email" }
@@ -205,10 +128,10 @@ Rules:
 
 - do not use `alias` here in `v2`
 - statement-backed search expressions are allowed
-- raw dotted names like `xg.group_name` are allowed
-- missing `searchColumnList` is treated as `[]`
+- raw dotted field names are allowed
+- missing `searchColumnList` becomes `[]`
 
-## Filter Structure
+## Filters And Nesting
 
 Base tuple:
 
@@ -216,38 +139,39 @@ Base tuple:
 [field, operator, value]
 ```
 
+Semantics:
+
+- top-level items are joined with `AND`
+- nested arrays become `OR` groups
+- nesting can recurse
+
 Examples:
 
 ```js
 ["status", "=", "Active"]
-["createdDate", ">=", "2024-01-01"]
-["stage", "IN", ["NEW", "PROCESSING"]]
 ```
 
-Boolean semantics:
+```js
+[
+  ["status", "=", "Active"],
+  ["createdDate", ">=", "2024-01-01"]
+]
+```
 
-- top-level items are joined with `AND`
-- nested arrays become `OR` groups
-- nesting is recursive
+```js
+[
+  ["status", "=", "Active"],
+  [
+    ["stage", "=", "NEW"],
+    ["stage", "=", "PROCESSING"]
+  ]
+]
+```
 
-Filter fields can target:
+Common operators:
 
-- exact aliases like `"createdDate"`
-- snake_case forms of camelCase aliases like `"created_date"`
-- literal `prefix.name` values like `"l.stage"`
-- statement-backed aliases
-
-## Supported Operators
-
-Validated operators:
-
-- `>`
-- `>=`
-- `<`
-- `<=`
 - `=`
 - `!=`
-- `<>`
 - `IN`
 - `NOT IN`
 - `! IN`
@@ -260,60 +184,63 @@ Validated operators:
 - `JSON_OVERLAPS`
 - `FIND_IN_SET`
 
-Examples:
+`IN` examples:
 
 ```js
 ["stage", "IN", ["NEW", "PROCESSING"]]
-["status", "NOT IN", ["Deleted", "Archived"]]
+["role", "NOT IN", ["Guest", "Banned"]]
 ["role", "! IN", ["Guest"]]
-["deletedAt", "IS", null]
-["approvedAt", "IS NOT", null]
-["metaInfo", "JSON_CONTAINS", { a: 1 }]
-["metaInfo", "JSON_OVERLAPS", { tags: ["vip"] }]
-["tags", "FIND_IN_SET", "vip"]
 ```
 
-In `v2`, empty arrays for `IN`-style operators are rejected cleanly.
-
-## Sorting And Pagination
-
-Sort shape:
+JSON examples:
 
 ```js
-{
-  attributes: ["createdDate"],
-  sorts: ["desc"]
-}
+["metaInfo", "JSON_CONTAINS", { a: 1 }]
+["metaInfo", "JSON_OVERLAPS", { tags: ["vip"] }]
+["groupId", "MEMBER OF", [1, 2, 3]]
 ```
 
-Rules:
+## Raw Conditions
 
-- sort directions must resolve to `ASC` or `DESC`
-- legacy `paginate()` mutates sort arrays by appending `id DESC`
-- `v2` clones sort arrays before applying the same tie-breaker
-- `v2` direct helper calls like `buildOrderByQuery()` also avoid mutating caller sort arrays
+`additionalWhereConditions` runs in raw mode.
 
-Pagination modes:
+Use it for:
 
-- page mode: `pageNo` + `itemsPerPage`
-- offset mode: `offset` + `limit`
+- raw field expressions
+- custom operators
+- parenthesized subqueries
 
-## Raw SQL Inputs
+Examples:
 
-Treat these as trusted-input-only:
+```js
+["cc.status", "!=", "Deleted"]
+["user_id", "IN", "(SELECT user_id FROM active_users)"]
+["DATE(created_at)", ">=", "2024-01-01"]
+```
 
-- `statement`
-- `joinQuery`
-- raw `additionalWhereConditions`
+Raw fragments are trusted-input-only SQL and must match the selected dialect.
 
-`joinQuery` is still string-concatenated SQL. `v2` normalizes leading whitespace, but it does not sanitize SQL.
+## Execution Pattern
 
-## Legacy References
+```js
+const queries = pagiHelp.paginate(paginationObject, options);
 
-Use these when the target code intentionally stays on the default export:
+const totalRows = await sequelize.query(queries.countQuery, {
+  replacements: queries.replacements,
+  type: QueryTypes.SELECT,
+});
 
-- `docs/MAINTENANCE_BASELINE.md`
-- `docs/legacy/README.md`
-- `docs/legacy/AGENT_USAGE_1.3.0.md`
-- `docs/CONSUMER_USAGE_AUDIT.md`
-- `docs/CONSUMER_USAGE_AUDIT_XLEY.md`
+const dataRows = await sequelize.query(queries.query, {
+  replacements: queries.replacements,
+  type: QueryTypes.SELECT,
+});
+```
+
+For legacy integrations, actual totals come from `totalCountQuery`, not `countQuery`.
+
+## Tests And References
+
+- `test/mysql.characterization.test.js`: legacy plus MySQL `v2`
+- `test/postgres.characterization.test.js`: PostgreSQL `v2`
+- `docs/V2_BASELINE.md`: maintainer contract for `v2`
+- `docs/MAINTENANCE_BASELINE.md`: maintainer contract for legacy

@@ -1,6 +1,6 @@
 # PagiHelp Commit History Notes
 
-This file traces the repository history commit by commit and maps each behavior-changing change to current coverage in `test/characterization.test.js`. The goal is to make future edits safer by distinguishing current contract, historical evolution, and non-runtime commits.
+This file traces the repository history commit by commit and maps each behavior-changing change to current regression coverage. The goal is to make future edits safer by distinguishing current contract, historical evolution, and non-runtime commits.
 
 ## Reading guide
 

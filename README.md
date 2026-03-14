@@ -1,11 +1,11 @@
 # PagiHelp
 
-`pagi-help@2.2.1` ships two APIs from one package.
+`pagi-help@2.3.0` ships two APIs from one package.
 
-- `require("pagi-help")` keeps the legacy `1.x` / `1.3.0` contract exactly.
-- `require("pagi-help/v2")` is the hardened `v2` API for new code.
+- `require("pagi-help")` keeps the frozen legacy MySQL contract.
+- `require("pagi-help/v2")` is the current hardened API for new code.
 
-## Installation
+## Install
 
 ```bash
 npm install pagi-help
@@ -13,20 +13,16 @@ npm install pagi-help
 
 ## Choose Your API
 
-Preferred for new integrations:
+New code:
 
 ```js
 const PagiHelpV2 = require("pagi-help/v2");
-
-const pagiHelp = new PagiHelpV2();
 ```
 
-Legacy compatibility for existing applications:
+Legacy compatibility:
 
 ```js
 const PagiHelp = require("pagi-help");
-
-const pagiHelp = new PagiHelp();
 ```
 
 Named exports are also available:
@@ -39,59 +35,123 @@ const {
 } = require("pagi-help");
 ```
 
-`PagiHelpV210` remains as a compatibility alias. New docs use `PagiHelpV2`.
+`PagiHelpV210` remains a compatibility alias. New code should use `PagiHelpV2`.
 
-## Quick Start: `v2`
+## `v2` Constructor
+
+```js
+const pagiHelp = new PagiHelpV2({
+  dialect: "mysql", // default
+  columnNameConverter: (name) =>
+    name.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`),
+  safeOptions: {
+    validate: true,
+  },
+});
+```
+
+`v2` constructor rules:
+
+- `dialect` may be `"mysql"` or `"postgres"`
+- omitted `dialect` defaults to `"mysql"`
+- `safeOptions.validate` is the only supported `safeOptions` key
+- legacy compatibility toggles are intentionally rejected on `v2`
+
+The legacy default export does not gain dialect support. It remains the old MySQL implementation.
+
+## Quick Start: MySQL
 
 ```js
 const PagiHelpV2 = require("pagi-help/v2");
 
 const pagiHelp = new PagiHelpV2({
-  columnNameConverter: (name) =>
-    name.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`),
+  dialect: "mysql",
 });
 
-const paginationObject = {
-  search: "mail",
-  filters: [
-    ["assignedToMe", "=", "Yes"],
-    ["stage", "IN", ["NEW", "PROCESSING"]],
-  ],
-  sort: {
-    attributes: ["createdDate"],
-    sorts: ["desc"],
-  },
-  pageNo: 1,
-  itemsPerPage: 20,
-};
-
-const options = [
+const queries = pagiHelp.paginate(
   {
-    tableName: "licenses",
-    columnList: [
-      { name: "license_id", prefix: "l", alias: "id" },
-      { name: "created_date", prefix: "l", alias: "createdDate" },
-      { name: "stage", prefix: "l", alias: "stage" },
-      {
-        statement: '(SELECT IF(l.assigned_to="1","Yes","No"))',
-        alias: "assignedToMe",
-      },
-      { name: "email", prefix: "i", alias: "email" },
-    ],
-    searchColumnList: [
-      { name: "email", prefix: "i" },
-      { name: "stage", prefix: "l" },
-    ],
-    joinQuery:
-      "l LEFT JOIN investor_registration i ON l.investor_id = i.investor_id",
-    additionalWhereConditions: [["l.status", "=", "Active"]],
+    search: "Active",
+    filters: [["status", "IN", ["Active", "Paused"]]],
+    sort: {
+      attributes: ["created_at"],
+      sorts: ["desc"],
+    },
+    pageNo: 1,
+    itemsPerPage: 10,
   },
-];
-
-const queries = pagiHelp.paginate(paginationObject, options);
+  [
+    {
+      tableName: "events",
+      columnList: [
+        { name: "id", alias: "id" },
+        { name: "status", alias: "status" },
+        { name: "created_at", alias: "created_at" },
+      ],
+      searchColumnList: [{ name: "status" }],
+    },
+  ]
+);
 ```
 
-Return shape:
+MySQL pagination clause:
+
+```sql
+LIMIT ?,?
+```
+
+Replacements are `[offset, limit]`.
+
+## Quick Start: PostgreSQL
+
+```js
+const PagiHelpV2 = require("pagi-help/v2");
+
+const pagiHelp = new PagiHelpV2({
+  dialect: "postgres",
+});
+
+const queries = pagiHelp.paginate(
+  {
+    search: "mail",
+    sort: {
+      attributes: ["createdAt"],
+      sorts: ["desc"],
+    },
+    pageNo: 2,
+    itemsPerPage: 10,
+  },
+  [
+    {
+      tableName: "licenses",
+      columnList: [
+        { name: "license_id", prefix: "l", alias: "id" },
+        { name: "created_at", prefix: "l", alias: "createdAt" },
+        {
+          statement:
+            "(CASE WHEN l.assigned_to = '1' THEN 'Yes' ELSE 'No' END)",
+          alias: "assignedToMe",
+        },
+      ],
+      searchColumnList: [{ name: "created_at", prefix: "l" }],
+      joinQuery: "l",
+    },
+  ]
+);
+```
+
+PostgreSQL pagination clause:
+
+```sql
+LIMIT ? OFFSET ?
+```
+
+Replacements are `[limit, offset]`.
+
+Use PostgreSQL SQL inside `statement`, `joinQuery`, and raw `additionalWhereConditions`. Do not reuse MySQL-only functions like `IF()` there.
+
+## Return Shape
+
+Both APIs return:
 
 ```js
 {
@@ -102,138 +162,63 @@ Return shape:
 }
 ```
 
-`v2` semantics:
+Key semantic difference:
 
-- `query` is the data query with optional `ORDER BY` and `LIMIT`
-- `countQuery` is an actual aggregate count query
-- `totalCountQuery` remains aggregate for return-shape compatibility
-- `replacements` contains the bound values in execution order
-
-Legacy default-export semantics:
-
-- `query` is still the data query
-- `countQuery` is still the old row-select query
-- `totalCountQuery` is still the real aggregate count query
+- `v2` `countQuery` is aggregate
+- legacy `countQuery` is still a row-select query
+- `totalCountQuery` remains aggregate in both paths
 
 ## What `v2` Fixes
 
-The hardened `v2` path now:
+Compared with the legacy export, `v2`:
 
 - stops emitting dangling `WHERE`
 - stops turning missing `search` into `%undefined%`
 - stops mutating caller sort arrays
 - stops logging replacements by default
-- makes `countQuery` an actual aggregate count
+- makes `countQuery` aggregate
 - rejects `alias` in `searchColumnList`
 - normalizes `joinQuery`
 - treats missing `searchColumnList` as `[]`
 - rejects empty `IN` arrays cleanly
 - throws `Error` objects instead of string throws
 
-These rules are the contract for `require("pagi-help/v2")`.
+## Dialect Notes
 
-## Shared Input Model
+Shared behavior:
 
-The overall query model stays the same across legacy and `v2`.
-
-`paginationObject`:
-
-```js
-{
-  search: "abc",
-  filters: [
-    ["status", "=", "Active"],
-    [
-      ["stage", "=", "NEW"],
-      ["stage", "=", "PROCESSING"]
-    ]
-  ],
-  sort: {
-    attributes: ["createdDate"],
-    sorts: ["desc"]
-  },
-  pageNo: 1,
-  itemsPerPage: 20
-}
-```
-
-In `v2`:
-
-- `search` is optional and defaults to `""`
-- `searchColumnList` is optional and defaults to `[]`
-
-Filter semantics:
-
-- top-level entries are joined with `AND`
-- nested arrays become `OR` groups
+- top-level `filters` are joined with `AND`
+- nested filter arrays become `OR` groups
 - tuples use `[field, operator, value]`
+- `joinQuery`, `statement`, and raw `additionalWhereConditions` are trusted-input-only SQL
 
-Common `columnList` shapes:
+Dialect-specific rendering on `v2`:
 
-```js
-{ name: "campaign_id", alias: "id" }
-{ name: "created_date", prefix: "l", alias: "createdDate" }
-{ statement: "COUNT(*)", alias: "countValue" }
-```
-
-Common `searchColumnList` shapes:
-
-```js
-{ name: "email" }
-{ name: "email", prefix: "i" }
-{ name: "xg.group_name" }
-{ statement: "(SELECT category_name FROM support_category WHERE id = src.category_id)" }
-```
-
-Do not put `alias` in `searchColumnList` for `v2`.
-
-## `v2` Options
-
-`v2` no longer exposes the old compatibility toggles like `countQueryMode`, `emptyInStrategy`, or `rejectSearchAliases`.
-
-The only supported `safeOptions` key is:
-
-```js
-const pagiHelp = new PagiHelpV2({
-  safeOptions: {
-    validate: true,
-  },
-});
-```
-
-Per-call:
-
-```js
-const queries = pagiHelp.paginate(paginationObject, options, {
-  validate: true,
-});
-```
-
-If you need the legacy quirks for a specific call from a `v2` instance, use:
-
-```js
-const legacyQueries = pagiHelp.paginateLegacy(paginationObject, options);
-```
-
-## Legacy Contract Still Ships
-
-This package does not force old users onto the new behavior.
-
-- Existing `require("pagi-help")` code continues to use the legacy class.
-- Existing consumer quirks remain documented in the legacy baseline and audits.
-- New code should import `pagi-help/v2` explicitly.
+- MySQL quotes generated table and `ORDER BY` identifiers with backticks
+- PostgreSQL quotes generated table and `ORDER BY` identifiers with double quotes
+- MySQL keeps `JSON_CONTAINS`, `JSON_OVERLAPS`, `FIND_IN_SET`, `RLIKE`, and `MEMBER OF` as MySQL SQL
+- PostgreSQL translates:
+  - `JSON_CONTAINS` -> `field::jsonb @> ?::jsonb`
+  - `JSON_OVERLAPS` -> emulated `jsonb` overlap SQL
+  - `FIND_IN_SET` -> `array_position(string_to_array(...), ?::text) IS NOT NULL`
+  - `RLIKE` -> `~`
+  - `MEMBER OF` -> `?::jsonb @> to_jsonb(field)`
+  - `! IN` -> `NOT IN`
 
 ## Docs Map
 
-- `docs/AGENT_USAGE.md`: primary quick reference for current `v2`
-- `docs/V2_BASELINE.md`: detailed maintainer contract for current `v2`
-- `docs/MAINTENANCE_BASELINE.md`: legacy default-export contract
+- `AGENTS.md`: repo-level instructions for Codex and other agents
+- `docs/AGENT_USAGE.md`: agent-facing quick reference for current `v2`
+- `docs/V2_BASELINE.md`: maintainer contract for current `v2`
+- `docs/MAINTENANCE_BASELINE.md`: frozen legacy default-export contract
 - `docs/legacy/README.md`: legacy archive entrypoint
-- `docs/legacy/AGENT_USAGE_1.3.0.md`: legacy agent quick reference
 - `docs/CONSUMER_USAGE_AUDIT.md`: downstream legacy usage audit
 - `docs/CONSUMER_USAGE_AUDIT_XLEY.md`: second downstream legacy usage audit
-- `test/characterization.test.js`: regression suite for both legacy and `v2`
-- `examples/`: runnable examples, including `examples/v2.js`
+- `test/characterization.test.js`: suite runner
+- `test/mysql.characterization.test.js`: legacy plus MySQL `v2` regression coverage
+- `test/postgres.characterization.test.js`: PostgreSQL `v2` regression coverage
+- `examples/v2.js`: MySQL `v2` example
+- `examples/v2-postgres.js`: PostgreSQL `v2` example
 
 ## Release Verification
 
