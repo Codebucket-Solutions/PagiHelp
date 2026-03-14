@@ -39,11 +39,13 @@ Use the package as two explicit contracts.
 - PostgreSQL compatibility aliases such as `JSON_CONTAINS`, `JSON_OVERLAPS`, `FIND_IN_SET`, `RLIKE`, `MEMBER OF`, and `! IN` still work on `v2`, but they are migration aids, not the preferred dialect contract.
 - For PostgreSQL, `schema.table.column` works in raw `additionalWhereConditions`; regular filters still target aliases or `prefix.column`.
 - `v2` only supports `safeOptions.validate`. If the caller needs old compatibility toggles, that is a sign they should stay on the legacy path.
+- Cursor/token pagination is not implemented yet. If asked about it, read `docs/V2_CURSOR_PAGINATION_DESIGN.md` and treat it as future design, not current behavior.
 
 ## If You Change Behavior
 
 - Keep legacy default-export SQL shape unchanged unless the change is intentionally versioned.
 - Update `docs/V2_BASELINE.md` for `v2` contract changes.
 - Update `docs/MAINTENANCE_BASELINE.md` for legacy contract changes.
+- Keep `docs/V2_CURSOR_PAGINATION_DESIGN.md` clearly marked as unimplemented design until the feature lands.
 - Add or update characterization tests in the appropriate dialect suite.
 - Run `npm run release:verify`.

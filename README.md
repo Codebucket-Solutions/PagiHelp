@@ -230,6 +230,7 @@ Dialect-specific rendering on `v2`:
 - `AGENTS.md`: repo-level instructions for Codex and other agents
 - `docs/AGENT_USAGE.md`: agent-facing quick reference for current `v2`
 - `docs/V2_BASELINE.md`: maintainer contract for current `v2`
+- `docs/V2_CURSOR_PAGINATION_DESIGN.md`: future cursor-pagination design for `v2` (not implemented yet)
 - `docs/MAINTENANCE_BASELINE.md`: frozen legacy default-export contract
 - `docs/legacy/README.md`: legacy archive entrypoint
 - `docs/CONSUMER_USAGE_AUDIT.md`: downstream legacy usage audit
