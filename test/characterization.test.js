@@ -1440,6 +1440,656 @@ test("v2 helper failures are surfaced as Error objects and helper sorts do not m
   assert.deepStrictEqual(sort.sorts, ["desc"]);
 });
 
+test("v2 shared helper methods preserve column rendering, filler alignment, tuple creation, and schema grouping", () => {
+  const pagiHelp = new PagiHelpV210({
+    columnNameConverter: (name) =>
+      name.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`),
+  });
+
+  assert.deepStrictEqual(
+    pagiHelp.columNames([
+      { name: "plainField", alias: "plainField" },
+      { name: "createdDate", prefix: "l", alias: "createdDate" },
+      { statement: "COUNT(*)", alias: "countValue" },
+      { statement: "NOW()" },
+    ]),
+    [
+      "plain_field AS plainField",
+      "l.created_date AS createdDate",
+      "COUNT(*) AS countValue",
+      "NOW()",
+    ]
+  );
+
+  assert.deepStrictEqual(
+    pagiHelp.filler([
+      {
+        columnList: [{ name: "ten_col", alias: "10" }],
+      },
+      {
+        columnList: [{ name: "two_col", alias: "2" }],
+      },
+    ]),
+    [
+      {
+        columnList: [
+          { statement: "(NULL)", alias: "2" },
+          { name: "ten_col", alias: "10" },
+        ],
+      },
+      {
+        columnList: [
+          { name: "two_col", alias: "2" },
+          { statement: "(NULL)", alias: "10" },
+        ],
+      },
+    ]
+  );
+
+  const arrayReplacements = [];
+  assert.equal(
+    pagiHelp.tupleCreator(
+      ["status", "IN", ["Active", "Paused"]],
+      arrayReplacements
+    ),
+    "status IN (?,?)"
+  );
+  assert.deepStrictEqual(arrayReplacements, ["Active", "Paused"]);
+
+  const rawReplacements = [];
+  assert.equal(
+    pagiHelp.tupleCreator(
+      ["status", "IN", "(SELECT status FROM live_statuses)"],
+      rawReplacements,
+      true
+    ),
+    "status IN (SELECT status FROM live_statuses)"
+  );
+  assert.deepStrictEqual(rawReplacements, []);
+
+  const schemaReplacements = [];
+  assert.equal(
+    pagiHelp.genSchema(
+      [
+        ["status", "=", "Active"],
+        [
+          ["stage", "=", "NEW"],
+          ["stage", "=", "PROCESSING"],
+        ],
+        ["created_at", ">=", "2024-01-01"],
+      ],
+      schemaReplacements
+    ),
+    "(status = ? AND ( stage = ? OR stage = ?) AND created_at >= ?)"
+  );
+  assert.deepStrictEqual(schemaReplacements, [
+    "Active",
+    "NEW",
+    "PROCESSING",
+    "2024-01-01",
+  ]);
+});
+
+test("v2 supports basic single-table pagination with nested filters and search", () => {
+  const pagiHelp = new PagiHelpV210();
+  const paginationObject = {
+    search: "xyz",
+    sort: {
+      attributes: ["created_date"],
+      sorts: ["asc"],
+    },
+    filters: [
+      ["from_date", "=", "2022-05-05"],
+      [
+        ["campaign_description", "=", "abc"],
+        ["to_date", "=", "2022-06-05"],
+      ],
+    ],
+    pageNo: 1,
+    itemsPerPage: 2,
+  };
+  const options = [
+    {
+      tableName: "campaigns",
+      columnList: [
+        { name: "campaign_id", alias: "id" },
+        { name: "campaign_name", alias: "campaign_name" },
+        { name: "campaign_description", alias: "campaign_description" },
+        { name: "from_date", alias: "from_date" },
+        { name: "to_date", alias: "to_date" },
+        { name: "created_date", alias: "created_date" },
+        { name: "updated_date", alias: "updated_date" },
+      ],
+      additionalWhereConditions: [["status", "=", "Active"]],
+      searchColumnList: [
+        { name: "campaign_name" },
+        { name: "campaign_description" },
+        { name: "from_date" },
+        { name: "to_date" },
+        { name: "created_date" },
+        { name: "updated_date" },
+      ],
+    },
+  ];
+
+  const result = runQuietly(() =>
+    pagiHelp.paginate(clone(paginationObject), clone(options))
+  );
+
+  assert.deepStrictEqual(result, {
+    countQuery:
+      "SELECT COUNT(*) AS countValue  FROM `campaigns` WHERE (status = ?) AND (from_date = ? AND ( campaign_description = ? OR to_date = ?)) AND ( campaign_name LIKE ? OR campaign_description LIKE ? OR from_date LIKE ? OR to_date LIKE ? OR created_date LIKE ? OR updated_date LIKE ? )",
+    totalCountQuery:
+      "SELECT COUNT(*) AS countValue  FROM `campaigns` WHERE (status = ?) AND (from_date = ? AND ( campaign_description = ? OR to_date = ?)) AND ( campaign_name LIKE ? OR campaign_description LIKE ? OR from_date LIKE ? OR to_date LIKE ? OR created_date LIKE ? OR updated_date LIKE ? )",
+    query:
+      "SELECT campaign_id AS id,campaign_name AS campaign_name,campaign_description AS campaign_description,from_date AS from_date,to_date AS to_date,created_date AS created_date,updated_date AS updated_date FROM `campaigns` WHERE (status = ?) AND (from_date = ? AND ( campaign_description = ? OR to_date = ?)) AND ( campaign_name LIKE ? OR campaign_description LIKE ? OR from_date LIKE ? OR to_date LIKE ? OR created_date LIKE ? OR updated_date LIKE ? ) ORDER BY `created_date`ASC,`id`DESC LIMIT ?,?",
+    replacements: [
+      "Active",
+      "2022-05-05",
+      "abc",
+      "2022-06-05",
+      "%xyz%",
+      "%xyz%",
+      "%xyz%",
+      "%xyz%",
+      "%xyz%",
+      "%xyz%",
+      0,
+      2,
+    ],
+  });
+});
+
+test("v2 resolves camelCase filters and supports statement, json, and find_in_set search flows", () => {
+  const pagiHelp = new PagiHelpV210({
+    columnNameConverter: (name) =>
+      name.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`),
+  });
+  const paginationObject = {
+    search: "mail",
+    sort: {
+      attributes: ["createdDate"],
+      sorts: ["desc"],
+    },
+    filters: [
+      ["assigned_to_me", "=", "Yes"],
+      ["l.stage", "in", ["NEW", "PROCESSING"]],
+      ["meta_info", "json_contains", { a: 1 }],
+      ["tags", "find_in_set", "vip"],
+    ],
+    pageNo: 2,
+    itemsPerPage: 5,
+  };
+  const options = [
+    {
+      tableName: "licenses",
+      columnList: [
+        { name: "license_id", prefix: "l", alias: "id" },
+        { name: "created_date", prefix: "l", alias: "createdDate" },
+        { name: "stage", prefix: "l", alias: "stage" },
+        { name: "meta_info", prefix: "l", alias: "metaInfo" },
+        { name: "tags", prefix: "l", alias: "tags" },
+        {
+          statement: '(SELECT IF(l.assigned_to="1","Yes","No"))',
+          alias: "assignedToMe",
+        },
+        { name: "email", prefix: "i", alias: "email" },
+      ],
+      searchColumnList: [
+        { name: "email", prefix: "i" },
+        { name: "stage", prefix: "l" },
+      ],
+      joinQuery:
+        " l left join investor_registration i on l.investor_id = i.investor_id ",
+      additionalWhereConditions: [["l.status", "=", "Active"]],
+    },
+  ];
+
+  const result = runQuietly(() =>
+    pagiHelp.paginate(clone(paginationObject), clone(options))
+  );
+
+  assert.deepStrictEqual(result, {
+    countQuery:
+      'SELECT COUNT(*) AS countValue  FROM `licenses` l left join investor_registration i on l.investor_id = i.investor_id  WHERE (l.status = ?) AND ((SELECT IF(l.assigned_to="1","Yes","No")) = ? AND l.stage IN (?,?) AND JSON_CONTAINS(l.meta_info, ?) AND FIND_IN_SET(?, l.tags)) AND ( i.email LIKE ? OR l.stage LIKE ? )',
+    totalCountQuery:
+      'SELECT COUNT(*) AS countValue  FROM `licenses` l left join investor_registration i on l.investor_id = i.investor_id  WHERE (l.status = ?) AND ((SELECT IF(l.assigned_to="1","Yes","No")) = ? AND l.stage IN (?,?) AND JSON_CONTAINS(l.meta_info, ?) AND FIND_IN_SET(?, l.tags)) AND ( i.email LIKE ? OR l.stage LIKE ? )',
+    query:
+      'SELECT l.license_id AS id,l.created_date AS createdDate,l.stage AS stage,l.meta_info AS metaInfo,l.tags AS tags,(SELECT IF(l.assigned_to="1","Yes","No")) AS assignedToMe,i.email AS email FROM `licenses` l left join investor_registration i on l.investor_id = i.investor_id  WHERE (l.status = ?) AND ((SELECT IF(l.assigned_to="1","Yes","No")) = ? AND l.stage IN (?,?) AND JSON_CONTAINS(l.meta_info, ?) AND FIND_IN_SET(?, l.tags)) AND ( i.email LIKE ? OR l.stage LIKE ? ) ORDER BY `created_date`DESC,`id`DESC LIMIT ?,?',
+    replacements: [
+      "Active",
+      "Yes",
+      "NEW",
+      "PROCESSING",
+      '{"a":1}',
+      "vip",
+      "%mail%",
+      "%mail%",
+      5,
+      5,
+    ],
+  });
+});
+
+test("v2 supports statement and dotted-name search columns", () => {
+  const pagiHelp = new PagiHelpV210();
+
+  const statementResult = runQuietly(() =>
+    pagiHelp.paginate(
+      { search: "BGL" },
+      [
+        {
+          tableName: "support_raise_complain",
+          columnList: [
+            { name: "id", alias: "id" },
+            {
+              statement:
+                "(SELECT category_name FROM support_category WHERE id = support_raise_complain.category_id and status != 'Deleted')",
+              alias: "category",
+            },
+          ],
+          searchColumnList: [
+            { name: "tracking_id" },
+            {
+              statement:
+                "(SELECT category_name FROM support_category WHERE id = support_raise_complain.category_id and status != 'Deleted')",
+            },
+          ],
+          additionalWhereConditions: [["status", "!=", "Deleted"]],
+        },
+      ]
+    )
+  );
+
+  assert.deepStrictEqual(statementResult, {
+    countQuery:
+      "SELECT COUNT(*) AS countValue  FROM `support_raise_complain` WHERE (status != ?) AND ( tracking_id LIKE ? OR (SELECT category_name FROM support_category WHERE id = support_raise_complain.category_id and status != 'Deleted') LIKE ? )",
+    totalCountQuery:
+      "SELECT COUNT(*) AS countValue  FROM `support_raise_complain` WHERE (status != ?) AND ( tracking_id LIKE ? OR (SELECT category_name FROM support_category WHERE id = support_raise_complain.category_id and status != 'Deleted') LIKE ? )",
+    query:
+      "SELECT id AS id,(SELECT category_name FROM support_category WHERE id = support_raise_complain.category_id and status != 'Deleted') AS category FROM `support_raise_complain` WHERE (status != ?) AND ( tracking_id LIKE ? OR (SELECT category_name FROM support_category WHERE id = support_raise_complain.category_id and status != 'Deleted') LIKE ? )",
+    replacements: ["Deleted", "%BGL%", "%BGL%"],
+  });
+
+  const dottedResult = runQuietly(() =>
+    pagiHelp.paginate(
+      { search: "group", pageNo: 1, itemsPerPage: 20 },
+      [
+        {
+          tableName: "xcommunity_groups",
+          columnList: [
+            { name: "id", alias: "id", prefix: "xg" },
+            { name: "group_name", alias: "groupName", prefix: "xg" },
+          ],
+          additionalWhereConditions: [["xg.status", "=", "Active"]],
+          searchColumnList: [{ name: "xg.group_name" }],
+          joinQuery: "xg",
+        },
+      ]
+    )
+  );
+
+  assert.deepStrictEqual(dottedResult, {
+    countQuery:
+      "SELECT COUNT(*) AS countValue  FROM `xcommunity_groups` xg WHERE (xg.status = ?) AND ( xg.group_name LIKE ? )",
+    totalCountQuery:
+      "SELECT COUNT(*) AS countValue  FROM `xcommunity_groups` xg WHERE (xg.status = ?) AND ( xg.group_name LIKE ? )",
+    query:
+      "SELECT xg.id AS id,xg.group_name AS groupName FROM `xcommunity_groups` xg WHERE (xg.status = ?) AND ( xg.group_name LIKE ? ) LIMIT ?,?",
+    replacements: ["Active", "%group%", 0, 20],
+  });
+});
+
+test("v2 preserves single-tuple normalization and json operator input handling", () => {
+  const pagiHelp = new PagiHelpV210({
+    columnNameConverter: (name) =>
+      name.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`),
+  });
+
+  assert.deepStrictEqual(
+    runQuietly(() =>
+      pagiHelp.paginate(
+        {
+          search: "",
+          filters: ["created_at", ">=", "2024-01-01"],
+        },
+        [
+          {
+            tableName: "events",
+            columnList: [
+              { name: "id", alias: "id" },
+              { name: "created_at", alias: "created_at" },
+            ],
+            searchColumnList: [],
+          },
+        ]
+      )
+    ),
+    {
+      countQuery:
+        "SELECT COUNT(*) AS countValue  FROM `events` WHERE (created_at >= ?)",
+      totalCountQuery:
+        "SELECT COUNT(*) AS countValue  FROM `events` WHERE (created_at >= ?)",
+      query: "SELECT id AS id,created_at AS created_at FROM `events` WHERE (created_at >= ?)",
+      replacements: ["2024-01-01"],
+    }
+  );
+
+  assert.deepStrictEqual(
+    runQuietly(() =>
+      pagiHelp.paginate(
+        {
+          search: "",
+          filters: ["trainingNameId", "JSON_CONTAINS", "[12]"],
+        },
+        [
+          {
+            tableName: "communication_announcement",
+            columnList: [
+              { name: "id", alias: "id", prefix: "ca" },
+              { name: "training_name_id", alias: "trainingNameId", prefix: "ca" },
+            ],
+            searchColumnList: [],
+            joinQuery: " ca",
+          },
+        ]
+      )
+    ),
+    {
+      countQuery:
+        "SELECT COUNT(*) AS countValue  FROM `communication_announcement` ca WHERE (JSON_CONTAINS(ca.training_name_id, ?))",
+      totalCountQuery:
+        "SELECT COUNT(*) AS countValue  FROM `communication_announcement` ca WHERE (JSON_CONTAINS(ca.training_name_id, ?))",
+      query:
+        "SELECT ca.id AS id,ca.training_name_id AS trainingNameId FROM `communication_announcement` ca WHERE (JSON_CONTAINS(ca.training_name_id, ?))",
+      replacements: ["[12]"],
+    }
+  );
+
+  assert.deepStrictEqual(
+    runQuietly(() =>
+      pagiHelp.paginate(
+        {
+          search: "",
+          filters: ["meta_info", "json_overlaps", { tags: ["vip"] }],
+        },
+        [
+          {
+            tableName: "licenses",
+            columnList: [
+              { name: "id", alias: "id" },
+              { name: "meta_info", prefix: "l", alias: "metaInfo" },
+            ],
+            joinQuery: " l",
+            searchColumnList: [],
+          },
+        ]
+      )
+    ),
+    {
+      countQuery:
+        "SELECT COUNT(*) AS countValue  FROM `licenses` l WHERE (JSON_OVERLAPS(l.meta_info, ?))",
+      totalCountQuery:
+        "SELECT COUNT(*) AS countValue  FROM `licenses` l WHERE (JSON_OVERLAPS(l.meta_info, ?))",
+      query:
+        "SELECT id AS id,l.meta_info AS metaInfo FROM `licenses` l WHERE (JSON_OVERLAPS(l.meta_info, ?))",
+      replacements: ['{"tags":["vip"]}'],
+    }
+  );
+});
+
+test("v2 preserves union padding and keeps pagination replacements trailing", () => {
+  const pagiHelp = new PagiHelpV210();
+  const result = runQuietly(() =>
+    pagiHelp.paginate(
+      {
+        search: "",
+        sort: {
+          attributes: ["id"],
+          sorts: ["asc"],
+        },
+        offset: 10,
+        limit: 20,
+      },
+      [
+        {
+          tableName: "a",
+          columnList: [
+            { name: "id", alias: "id" },
+            { name: "name", alias: "name" },
+          ],
+          searchColumnList: [{ name: "name" }],
+          additionalWhereConditions: [["status", "=", "Active"]],
+        },
+        {
+          tableName: "b",
+          columnList: [{ name: "id", alias: "id" }],
+          searchColumnList: [],
+          additionalWhereConditions: [["status", "=", "Active"]],
+        },
+      ]
+    )
+  );
+
+  assert.deepStrictEqual(result, {
+    countQuery:
+      "SELECT SUM(countValue) AS countValue FROM ( SELECT COUNT(*) AS countValue  FROM `a` WHERE (status = ?) UNION ALL SELECT COUNT(*) AS countValue  FROM `b` WHERE (status = ?) ) AS totalCounts",
+    totalCountQuery:
+      "SELECT SUM(countValue) AS countValue FROM ( SELECT COUNT(*) AS countValue  FROM `a` WHERE (status = ?) UNION ALL SELECT COUNT(*) AS countValue  FROM `b` WHERE (status = ?) ) AS totalCounts",
+    query:
+      "SELECT id AS id,name AS name FROM `a` WHERE (status = ?) UNION ALL SELECT id AS id,(NULL) AS name FROM `b` WHERE (status = ?) ORDER BY `id`ASC,`id`DESC LIMIT ?,?",
+    replacements: ["Active", "Active", 10, 20],
+  });
+  assert.deepStrictEqual(result.replacements.slice(-2), [10, 20]);
+});
+
+test("v2 preserves raw additionalWhereConditions forms", () => {
+  const pagiHelp = new PagiHelpV210();
+
+  assert.deepStrictEqual(
+    runQuietly(() =>
+      pagiHelp.paginate(
+        { search: "" },
+        [
+          {
+            tableName: "events",
+            columnList: [{ name: "id", alias: "id" }],
+            searchColumnList: [],
+            additionalWhereConditions: [
+              ["status", "IN", "(SELECT status FROM live_statuses)"],
+            ],
+          },
+        ]
+      )
+    ),
+    {
+      countQuery:
+        "SELECT COUNT(*) AS countValue  FROM `events` WHERE (status IN (SELECT status FROM live_statuses))",
+      totalCountQuery:
+        "SELECT COUNT(*) AS countValue  FROM `events` WHERE (status IN (SELECT status FROM live_statuses))",
+      query:
+        "SELECT id AS id FROM `events` WHERE (status IN (SELECT status FROM live_statuses))",
+      replacements: [],
+    }
+  );
+
+  assert.deepStrictEqual(
+    runQuietly(() =>
+      pagiHelp.paginate(
+        {
+          search: "",
+          pageNo: 1,
+          itemsPerPage: 5,
+        },
+        [
+          {
+            tableName: "support_raise_complain",
+            columnList: [{ name: "id", alias: "id" }],
+            searchColumnList: [],
+            additionalWhereConditions: [
+              [
+                "(SELECT category_name FROM support_category WHERE id = support_raise_complain.category_id)",
+                "=",
+                "BGL",
+              ],
+            ],
+          },
+        ]
+      )
+    ),
+    {
+      countQuery:
+        "SELECT COUNT(*) AS countValue  FROM `support_raise_complain` WHERE ((SELECT category_name FROM support_category WHERE id = support_raise_complain.category_id) = ?)",
+      totalCountQuery:
+        "SELECT COUNT(*) AS countValue  FROM `support_raise_complain` WHERE ((SELECT category_name FROM support_category WHERE id = support_raise_complain.category_id) = ?)",
+      query:
+        "SELECT id AS id FROM `support_raise_complain` WHERE ((SELECT category_name FROM support_category WHERE id = support_raise_complain.category_id) = ?) LIMIT ?,?",
+      replacements: ["BGL", 0, 5],
+    }
+  );
+
+  assert.deepStrictEqual(
+    runQuietly(() =>
+      pagiHelp.paginate(
+        {
+          search: "",
+          pageNo: 2,
+          itemsPerPage: 15,
+        },
+        [
+          {
+            tableName: "coupons",
+            columnList: [{ name: "id", alias: "id", prefix: "cc" }],
+            additionalWhereConditions: ["cc.status", "!=", "Deleted"],
+            joinQuery: "cc",
+          },
+        ]
+      )
+    ),
+    {
+      countQuery:
+        "SELECT COUNT(*) AS countValue  FROM `coupons` cc WHERE cc.status != ?",
+      totalCountQuery:
+        "SELECT COUNT(*) AS countValue  FROM `coupons` cc WHERE cc.status != ?",
+      query:
+        "SELECT cc.id AS id FROM `coupons` cc WHERE cc.status != ? LIMIT ?,?",
+      replacements: ["Deleted", 15, 15],
+    }
+  );
+});
+
+test("v2 keeps parenthesized filter values parameterized and raw operators available in additionalWhereConditions", () => {
+  const pagiHelp = new PagiHelpV210();
+
+  assert.deepStrictEqual(
+    runQuietly(() =>
+      pagiHelp.paginate(
+        {
+          search: "",
+          filters: ["status", "IN", "(SELECT status FROM live_statuses)"],
+        },
+        [
+          {
+            tableName: "events",
+            columnList: [
+              { name: "id", alias: "id" },
+              { name: "status", alias: "status" },
+            ],
+            searchColumnList: [],
+          },
+        ]
+      )
+    ),
+    {
+      countQuery:
+        "SELECT COUNT(*) AS countValue  FROM `events` WHERE (status IN ?)",
+      totalCountQuery:
+        "SELECT COUNT(*) AS countValue  FROM `events` WHERE (status IN ?)",
+      query:
+        "SELECT id AS id,status AS status FROM `events` WHERE (status IN ?)",
+      replacements: ["(SELECT status FROM live_statuses)"],
+    }
+  );
+
+  assert.deepStrictEqual(
+    runQuietly(() =>
+      pagiHelp.paginate(
+        { search: "" },
+        [
+          {
+            tableName: "events",
+            columnList: [{ name: "id", alias: "id" }],
+            searchColumnList: [],
+            additionalWhereConditions: [["name", "REGEXP", "^A"]],
+          },
+        ]
+      )
+    ),
+    {
+      countQuery:
+        "SELECT COUNT(*) AS countValue  FROM `events` WHERE (name REGEXP ?)",
+      totalCountQuery:
+        "SELECT COUNT(*) AS countValue  FROM `events` WHERE (name REGEXP ?)",
+      query: "SELECT id AS id FROM `events` WHERE (name REGEXP ?)",
+      replacements: ["^A"],
+    }
+  );
+});
+
+test("v2 preserves validated operator SQL shapes", () => {
+  const pagiHelp = new PagiHelpV210();
+  const result = runQuietly(() =>
+    pagiHelp.paginate(
+      {
+        search: "",
+        filters: [
+          ["status", "not in", ["Deleted", "Archived"]],
+          ["role", "! in", ["Guest"]],
+          ["deletedAt", "is", null],
+          ["approvedAt", "is not", null],
+          ["name", "like", "A%"],
+          ["name", "rlike", "^A"],
+          ["groupId", "member of", "admins"],
+        ],
+      },
+      [
+        {
+          tableName: "users",
+          columnList: [
+            { name: "id", alias: "id" },
+            { name: "status", alias: "status" },
+            { name: "role", alias: "role" },
+            { name: "deleted_at", alias: "deletedAt" },
+            { name: "approved_at", alias: "approvedAt" },
+            { name: "name", alias: "name" },
+            { name: "group_id", alias: "groupId" },
+          ],
+          searchColumnList: [],
+        },
+      ]
+    )
+  );
+
+  assert.deepStrictEqual(result, {
+    countQuery:
+      "SELECT COUNT(*) AS countValue  FROM `users` WHERE (status NOT IN (?,?) AND role ! IN (?) AND deleted_at IS ? AND approved_at IS NOT ? AND name LIKE ? AND name RLIKE ? AND group_id MEMBER OF ?)",
+    totalCountQuery:
+      "SELECT COUNT(*) AS countValue  FROM `users` WHERE (status NOT IN (?,?) AND role ! IN (?) AND deleted_at IS ? AND approved_at IS NOT ? AND name LIKE ? AND name RLIKE ? AND group_id MEMBER OF ?)",
+    query:
+      "SELECT id AS id,status AS status,role AS role,deleted_at AS deletedAt,approved_at AS approvedAt,name AS name,group_id AS groupId FROM `users` WHERE (status NOT IN (?,?) AND role ! IN (?) AND deleted_at IS ? AND approved_at IS NOT ? AND name LIKE ? AND name RLIKE ? AND group_id MEMBER OF ?)",
+    replacements: [
+      "Deleted",
+      "Archived",
+      "Guest",
+      null,
+      null,
+      "A%",
+      "^A",
+      "admins",
+    ],
+  });
+});
+
 test("invalid filter fields, operators, and sort values throw the current string errors", () => {
   const pagiHelp = new PagiHelp();
 

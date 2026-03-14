@@ -1,6 +1,6 @@
 # Agent Usage Guide
 
-This file is the agent-facing quick reference for `pagi-help@2.2.0`.
+This file is the agent-facing quick reference for `pagi-help@2.2.1`.
 
 The package ships two explicit entrypoints:
 

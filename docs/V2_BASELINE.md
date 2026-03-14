@@ -1,12 +1,12 @@
 # PagiHelp v2 Baseline
 
-This file captures the current `v2` contract shipped by `v2.js` at package version `2.2.0`.
+This file captures the current `v2` contract shipped by `v2.js` at package version `2.2.1`.
 
 The `v2` API is grounded on the old `1.3.0` safe path, but it is now a hardened contract rather than a compatibility layer with legacy toggle switches.
 
 ## Export Map
 
-Package `2.2.0` ships two explicit class contracts:
+Package `2.2.1` ships two explicit class contracts:
 
 - `require("pagi-help")` -> legacy `PagiHelp` default export from `index.js`
 - `require("pagi-help").PagiHelpLegacy` -> same legacy class

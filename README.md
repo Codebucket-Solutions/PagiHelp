@@ -1,6 +1,6 @@
 # PagiHelp
 
-`pagi-help@2.2.0` ships two APIs from one package.
+`pagi-help@2.2.1` ships two APIs from one package.
 
 - `require("pagi-help")` keeps the legacy `1.x` / `1.3.0` contract exactly.
 - `require("pagi-help/v2")` is the hardened `v2` API for new code.
