@@ -1,12 +1,12 @@
 # PagiHelp v2 Baseline
 
-This file captures the current `v2` contract shipped by `v2.js` at package version `2.3.0`.
+This file captures the current `v2` contract shipped by `v2.js` at package version `2.4.0`.
 
 `v2` is grounded on the old `1.3.0` safe path, but it is now a hardened contract with dialect-aware SQL rendering.
 
 ## Export Map
 
-Package `2.3.0` ships two explicit class contracts:
+Package `2.4.0` ships two explicit class contracts:
 
 - `require("pagi-help")` -> legacy `PagiHelp` default export from `index.js`
 - `require("pagi-help").PagiHelpLegacy` -> same legacy class
@@ -55,8 +55,14 @@ Legacy stays MySQL-only. Dialect support applies to `v2` only.
 - switches generated table and `ORDER BY` identifiers to double quotes
 - paginates with `LIMIT ? OFFSET ?`
 - changes pagination replacement order to `[limit, offset]`
-- translates MySQL-only validated operators into PostgreSQL SQL:
-  - `JSON_CONTAINS` -> `field::jsonb @> ?::jsonb`
+- validates and renders its own native operator set:
+  - `ILIKE`
+  - `~`, `~*`, `!~`, `!~*`
+  - `@>`, `<@`
+  - `?`, `?|`, `?&`
+  - `&&`
+- also accepts compatibility aliases for shared-code migrations:
+  - `JSON_CONTAINS` -> `@>`
   - `JSON_OVERLAPS` -> emulated `jsonb` overlap SQL
   - `FIND_IN_SET` -> `array_position(string_to_array(...), ?::text) IS NOT NULL`
   - `RLIKE` -> `~`

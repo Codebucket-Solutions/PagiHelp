@@ -29,7 +29,7 @@ test("v2 postgres accepts a constructor dialect and preserves helper rendering",
 
   const tupleReplacements = [];
   assert.equal(
-    pagiHelp.tupleCreator(["profile", "JSON_CONTAINS", { active: true }], tupleReplacements),
+    pagiHelp.tupleCreator(["profile", "@>", { active: true }], tupleReplacements),
     "(profile)::jsonb @> (?::jsonb)"
   );
   assert.deepStrictEqual(tupleReplacements, ['{"active":true}']);
@@ -48,8 +48,8 @@ test("v2 postgres generates aggregate count queries and LIMIT/OFFSET in postgres
     filters: [
       ["assignedToMe", "=", "Yes"],
       ["l.stage", "in", ["NEW", "PROCESSING"]],
-      ["metaInfo", "json_contains", { a: 1 }],
-      ["tags", "find_in_set", "vip"],
+      ["metaInfo", "@>", { a: 1 }],
+      ["tags", "?", "vip"],
     ],
     pageNo: 2,
     itemsPerPage: 5,
@@ -86,11 +86,11 @@ test("v2 postgres generates aggregate count queries and LIMIT/OFFSET in postgres
 
   assert.deepStrictEqual(result, {
     countQuery:
-      'SELECT COUNT(*) AS countValue  FROM "licenses" l LEFT JOIN investor_registration i ON l.investor_id = i.investor_id WHERE (l.status = ?) AND ((CASE WHEN l.assigned_to = \'1\' THEN \'Yes\' ELSE \'No\' END) = ? AND l.stage IN (?,?) AND (l.meta_info)::jsonb @> (?::jsonb) AND array_position(string_to_array(COALESCE(l.tags::text, \'\'), \',\'), ?::text) IS NOT NULL) AND ( i.email LIKE ? OR l.stage LIKE ? )',
+      'SELECT COUNT(*) AS countValue  FROM "licenses" l LEFT JOIN investor_registration i ON l.investor_id = i.investor_id WHERE (l.status = ?) AND ((CASE WHEN l.assigned_to = \'1\' THEN \'Yes\' ELSE \'No\' END) = ? AND l.stage IN (?,?) AND (l.meta_info)::jsonb @> (?::jsonb) AND (l.tags)::jsonb ? ?::text) AND ( i.email LIKE ? OR l.stage LIKE ? )',
     totalCountQuery:
-      'SELECT COUNT(*) AS countValue  FROM "licenses" l LEFT JOIN investor_registration i ON l.investor_id = i.investor_id WHERE (l.status = ?) AND ((CASE WHEN l.assigned_to = \'1\' THEN \'Yes\' ELSE \'No\' END) = ? AND l.stage IN (?,?) AND (l.meta_info)::jsonb @> (?::jsonb) AND array_position(string_to_array(COALESCE(l.tags::text, \'\'), \',\'), ?::text) IS NOT NULL) AND ( i.email LIKE ? OR l.stage LIKE ? )',
+      'SELECT COUNT(*) AS countValue  FROM "licenses" l LEFT JOIN investor_registration i ON l.investor_id = i.investor_id WHERE (l.status = ?) AND ((CASE WHEN l.assigned_to = \'1\' THEN \'Yes\' ELSE \'No\' END) = ? AND l.stage IN (?,?) AND (l.meta_info)::jsonb @> (?::jsonb) AND (l.tags)::jsonb ? ?::text) AND ( i.email LIKE ? OR l.stage LIKE ? )',
     query:
-      'SELECT l.license_id AS id,l.created_at AS createdAt,l.stage AS stage,l.meta_info AS metaInfo,l.tags AS tags,(CASE WHEN l.assigned_to = \'1\' THEN \'Yes\' ELSE \'No\' END) AS assignedToMe,i.email AS email FROM "licenses" l LEFT JOIN investor_registration i ON l.investor_id = i.investor_id WHERE (l.status = ?) AND ((CASE WHEN l.assigned_to = \'1\' THEN \'Yes\' ELSE \'No\' END) = ? AND l.stage IN (?,?) AND (l.meta_info)::jsonb @> (?::jsonb) AND array_position(string_to_array(COALESCE(l.tags::text, \'\'), \',\'), ?::text) IS NOT NULL) AND ( i.email LIKE ? OR l.stage LIKE ? ) ORDER BY "createdAt"DESC,"id"DESC LIMIT ? OFFSET ?',
+      'SELECT l.license_id AS id,l.created_at AS createdAt,l.stage AS stage,l.meta_info AS metaInfo,l.tags AS tags,(CASE WHEN l.assigned_to = \'1\' THEN \'Yes\' ELSE \'No\' END) AS assignedToMe,i.email AS email FROM "licenses" l LEFT JOIN investor_registration i ON l.investor_id = i.investor_id WHERE (l.status = ?) AND ((CASE WHEN l.assigned_to = \'1\' THEN \'Yes\' ELSE \'No\' END) = ? AND l.stage IN (?,?) AND (l.meta_info)::jsonb @> (?::jsonb) AND (l.tags)::jsonb ? ?::text) AND ( i.email LIKE ? OR l.stage LIKE ? ) ORDER BY "createdAt"DESC,"id"DESC LIMIT ? OFFSET ?',
     replacements: [
       "Active",
       "Yes",
@@ -102,6 +102,97 @@ test("v2 postgres generates aggregate count queries and LIMIT/OFFSET in postgres
       "%mail%",
       5,
       5,
+    ],
+  });
+});
+
+test("v2 postgres supports postgres-native operators in filters and validation", () => {
+  const pagiHelp = new PagiHelpV210({
+    dialect: "postgres",
+  });
+
+  const validation = pagiHelp.validatePaginationInput(
+    {
+      search: "",
+      filters: [
+        ["metaInfo", "@>", { role: "admin" }],
+        ["metaInfo", "<@", { role: "admin", active: true }],
+        ["metaInfo", "?|", ["role", "active"]],
+        ["metaInfo", "?&", ["role", "active"]],
+        ["tags", "&&", ["vip", "beta"]],
+        ["name", "ILIKE", "%ann%"],
+        ["email", "~*", "^[a-z]"],
+      ],
+    },
+    [
+      {
+        tableName: "users",
+        columnList: [
+          { name: "id", alias: "id" },
+          { name: "meta_info", alias: "metaInfo" },
+          { name: "tags", alias: "tags" },
+          { name: "name", alias: "name" },
+          { name: "email", alias: "email" },
+        ],
+        searchColumnList: [],
+      },
+    ]
+  );
+
+  assert.deepStrictEqual(validation, {
+    valid: true,
+    errors: [],
+    warnings: [],
+  });
+
+  const result = runQuietly(() =>
+    pagiHelp.paginate(
+      {
+        search: "",
+        filters: [
+          ["metaInfo", "@>", { role: "admin" }],
+          ["metaInfo", "<@", { role: "admin", active: true }],
+          ["metaInfo", "?|", ["role", "active"]],
+          ["metaInfo", "?&", ["role", "active"]],
+          ["tags", "&&", ["vip", "beta"]],
+          ["name", "ILIKE", "%ann%"],
+          ["email", "~*", "^[a-z]"],
+        ],
+      },
+      [
+        {
+          tableName: "users",
+          columnList: [
+            { name: "id", alias: "id" },
+            { name: "meta_info", alias: "metaInfo" },
+            { name: "tags", alias: "tags" },
+            { name: "name", alias: "name" },
+            { name: "email", alias: "email" },
+          ],
+          searchColumnList: [],
+        },
+      ]
+    )
+  );
+
+  assert.deepStrictEqual(result, {
+    countQuery:
+      'SELECT COUNT(*) AS countValue  FROM "users" WHERE ((meta_info)::jsonb @> (?::jsonb) AND (meta_info)::jsonb <@ (?::jsonb) AND (meta_info)::jsonb ?| ARRAY[?,?] AND (meta_info)::jsonb ?& ARRAY[?,?] AND tags && ARRAY[?,?] AND name ILIKE ? AND email ~* ?)',
+    totalCountQuery:
+      'SELECT COUNT(*) AS countValue  FROM "users" WHERE ((meta_info)::jsonb @> (?::jsonb) AND (meta_info)::jsonb <@ (?::jsonb) AND (meta_info)::jsonb ?| ARRAY[?,?] AND (meta_info)::jsonb ?& ARRAY[?,?] AND tags && ARRAY[?,?] AND name ILIKE ? AND email ~* ?)',
+    query:
+      'SELECT id AS id,meta_info AS metaInfo,tags AS tags,name AS name,email AS email FROM "users" WHERE ((meta_info)::jsonb @> (?::jsonb) AND (meta_info)::jsonb <@ (?::jsonb) AND (meta_info)::jsonb ?| ARRAY[?,?] AND (meta_info)::jsonb ?& ARRAY[?,?] AND tags && ARRAY[?,?] AND name ILIKE ? AND email ~* ?)',
+    replacements: [
+      '{"role":"admin"}',
+      '{"role":"admin","active":true}',
+      "role",
+      "active",
+      "role",
+      "active",
+      "vip",
+      "beta",
+      "%ann%",
+      "^[a-z]",
     ],
   });
 });
@@ -261,7 +352,7 @@ test("v2 postgres supports dotted search columns and raw additionalWhereConditio
   });
 });
 
-test("v2 postgres maps JSON_OVERLAPS, MEMBER OF, RLIKE, and ! IN to postgres SQL", () => {
+test("v2 postgres keeps compatibility aliases for shared-code migrations", () => {
   const pagiHelp = new PagiHelpV210({
     dialect: "postgres",
   });

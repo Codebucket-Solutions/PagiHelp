@@ -23,26 +23,6 @@ const supportedDialects = Object.freeze({
   mysql: mysqlDialect,
   postgres: postgresDialect,
 });
-const allowedOperators = new Set([
-  ">",
-  ">=",
-  "<",
-  "<=",
-  "=",
-  "!=",
-  "<>",
-  "IN",
-  "NOT IN",
-  "! IN",
-  "IS",
-  "IS NOT",
-  "LIKE",
-  "RLIKE",
-  "MEMBER OF",
-  "JSON_CONTAINS",
-  "JSON_OVERLAPS",
-  "FIND_IN_SET",
-]);
 const allowedSorts = new Set(["ASC", "DESC"]);
 
 class PagiHelpV210 extends PagiHelp {
@@ -187,6 +167,73 @@ class PagiHelpV210 extends PagiHelp {
         )
       );
 
+    this.validateConditionTuple = (tuple, path, result, asItIs = false) => {
+      if (tuple.length !== 3) {
+        return this.addValidationIssue(
+          result,
+          "errors",
+          `${path} must contain exactly three items`
+        );
+      }
+
+      const [field, operator, value] = tuple;
+      const normalizedOperator = operator?.toUpperCase?.();
+
+      if (typeof field !== "string" || field.trim() === "") {
+        this.addValidationIssue(
+          result,
+          "errors",
+          `${path}[0] must be a non-empty string`
+        );
+      }
+
+      if (typeof operator !== "string" || operator.trim() === "") {
+        this.addValidationIssue(
+          result,
+          "errors",
+          `${path}[1] must be a non-empty string`
+        );
+        return result;
+      }
+
+      if (
+        !asItIs &&
+        !this.dialectAdapter.allowedOperators.has(normalizedOperator)
+      ) {
+        this.addValidationIssue(
+          result,
+          "errors",
+          `${path}[1] must be one of the supported operators for ${this.dialect}`
+        );
+      }
+
+      if (
+        ["IN", "NOT IN", "! IN"].includes(normalizedOperator) &&
+        Array.isArray(value) &&
+        value.length === 0
+      ) {
+        this.addValidationIssue(
+          result,
+          "errors",
+          `${path}[2] must not be an empty array for ${normalizedOperator}`
+        );
+      }
+
+      if (
+        !asItIs &&
+        Array.isArray(value) &&
+        !this.dialectAdapter.arrayValueOperators.has(normalizedOperator)
+      ) {
+        this.addValidationIssue(
+          result,
+          "warnings",
+          `${path}[2] is an array but ${normalizedOperator} is not usually used with array values`
+        );
+      }
+
+      return result;
+    };
+
     this.processFilterCondition = (condition, columnList) => {
       try {
         return legacyProcessFilterCondition(condition, columnList);
@@ -257,7 +304,10 @@ class PagiHelpV210 extends PagiHelp {
       try {
         this.resolveSafeOptions(overrideSafeOptions);
 
-        if (!asItIs && (!operator || !allowedOperators.has(operator))) {
+        if (
+          !asItIs &&
+          (!operator || !this.dialectAdapter.allowedOperators.has(operator))
+        ) {
           throw new Error("Invalid Operator");
         }
 

@@ -6,7 +6,11 @@ const pagiHelp = new PagiHelpV2({
 
 const paginationObject = {
   search: "mail",
-  filters: [["stage", "IN", ["NEW", "PROCESSING"]]],
+  filters: [
+    ["metaInfo", "@>", { priority: "high" }],
+    ["tags", "?|", ["vip", "priority"]],
+    ["email", "~*", "@example\\.com$"],
+  ],
   sort: {
     attributes: ["createdAt"],
     sorts: ["desc"],
@@ -22,6 +26,8 @@ const options = [
       { name: "license_id", prefix: "l", alias: "id" },
       { name: "created_at", prefix: "l", alias: "createdAt" },
       { name: "stage", prefix: "l", alias: "stage" },
+      { name: "meta_info", prefix: "l", alias: "metaInfo" },
+      { name: "tags", prefix: "l", alias: "tags" },
       {
         statement: "(CASE WHEN l.assigned_to = '1' THEN 'Yes' ELSE 'No' END)",
         alias: "assignedToMe",

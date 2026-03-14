@@ -59,8 +59,65 @@ const pushRepeatedValue = (replacements, value, count) => {
   }
 };
 
+const buildArrayLiteralPlaceholders = (values) =>
+  `ARRAY[${"?,"
+    .repeat(values.length)
+    .slice(0, -1)}]`;
+
+const normalizeStringArray = (value) => {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item));
+  }
+
+  return [String(value)];
+};
+
 module.exports = {
   name: "postgres",
+  allowedOperators: new Set([
+    ">",
+    ">=",
+    "<",
+    "<=",
+    "=",
+    "!=",
+    "<>",
+    "IN",
+    "NOT IN",
+    "! IN",
+    "IS",
+    "IS NOT",
+    "LIKE",
+    "ILIKE",
+    "~",
+    "~*",
+    "!~",
+    "!~*",
+    "@>",
+    "<@",
+    "?",
+    "?|",
+    "?&",
+    "&&",
+    "RLIKE",
+    "MEMBER OF",
+    "JSON_CONTAINS",
+    "JSON_OVERLAPS",
+    "FIND_IN_SET",
+  ]),
+  arrayValueOperators: new Set([
+    "IN",
+    "NOT IN",
+    "! IN",
+    "@>",
+    "<@",
+    "?|",
+    "?&",
+    "&&",
+    "JSON_CONTAINS",
+    "JSON_OVERLAPS",
+    "MEMBER OF",
+  ]),
 
   quoteIdentifier,
 
@@ -105,6 +162,16 @@ module.exports = {
       return `(${field})::jsonb @> (?::jsonb)`;
     }
 
+    if (operator === "@>") {
+      replacements.push(serializePostgresJsonValue(value));
+      return `(${field})::jsonb @> (?::jsonb)`;
+    }
+
+    if (operator === "<@") {
+      replacements.push(serializePostgresJsonValue(value));
+      return `(${field})::jsonb <@ (?::jsonb)`;
+    }
+
     if (operator === "JSON_OVERLAPS") {
       const serializedValue = serializePostgresJsonValue(value);
       pushRepeatedValue(replacements, serializedValue, 8);
@@ -133,6 +200,25 @@ module.exports = {
     if (operator === "MEMBER OF") {
       replacements.push(serializePostgresJsonValue(value));
       return `(?::jsonb @> to_jsonb(${field}))`;
+    }
+
+    if (operator === "?") {
+      replacements.push(String(value));
+      return `(${field})::jsonb ? ?::text`;
+    }
+
+    if (operator === "?|" || operator === "?&") {
+      const values = normalizeStringArray(value);
+      replacements.push(...values);
+      return `(${field})::jsonb ${operator} ${buildArrayLiteralPlaceholders(
+        values
+      )}`;
+    }
+
+    if (operator === "&&") {
+      const values = Array.isArray(value) ? value : [value];
+      replacements.push(...values);
+      return `${field} && ${buildArrayLiteralPlaceholders(values)}`;
     }
 
     if (operator === "IS") {

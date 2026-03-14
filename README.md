@@ -1,6 +1,6 @@
 # PagiHelp
 
-`pagi-help@2.3.0` ships two APIs from one package.
+`pagi-help@2.4.0` ships two APIs from one package.
 
 - `require("pagi-help")` keeps the frozen legacy MySQL contract.
 - `require("pagi-help/v2")` is the current hardened API for new code.
@@ -113,6 +113,11 @@ const pagiHelp = new PagiHelpV2({
 const queries = pagiHelp.paginate(
   {
     search: "mail",
+    filters: [
+      ["metaInfo", "@>", { priority: "high" }],
+      ["tags", "?|", ["vip", "priority"]],
+      ["email", "~*", "@example\\.com$"],
+    ],
     sort: {
       attributes: ["createdAt"],
       sorts: ["desc"],
@@ -126,6 +131,8 @@ const queries = pagiHelp.paginate(
       columnList: [
         { name: "license_id", prefix: "l", alias: "id" },
         { name: "created_at", prefix: "l", alias: "createdAt" },
+        { name: "meta_info", prefix: "l", alias: "metaInfo" },
+        { name: "tags", prefix: "l", alias: "tags" },
         {
           statement:
             "(CASE WHEN l.assigned_to = '1' THEN 'Yes' ELSE 'No' END)",
@@ -197,8 +204,14 @@ Dialect-specific rendering on `v2`:
 - MySQL quotes generated table and `ORDER BY` identifiers with backticks
 - PostgreSQL quotes generated table and `ORDER BY` identifiers with double quotes
 - MySQL keeps `JSON_CONTAINS`, `JSON_OVERLAPS`, `FIND_IN_SET`, `RLIKE`, and `MEMBER OF` as MySQL SQL
-- PostgreSQL translates:
-  - `JSON_CONTAINS` -> `field::jsonb @> ?::jsonb`
+- PostgreSQL has its own native operator set on `v2`:
+  - `ILIKE`
+  - `~`, `~*`, `!~`, `!~*`
+  - `@>`, `<@`
+  - `?`, `?|`, `?&`
+  - `&&`
+- PostgreSQL also keeps compatibility aliases for shared-code migrations:
+  - `JSON_CONTAINS` -> `@>`
   - `JSON_OVERLAPS` -> emulated `jsonb` overlap SQL
   - `FIND_IN_SET` -> `array_position(string_to_array(...), ?::text) IS NOT NULL`
   - `RLIKE` -> `~`

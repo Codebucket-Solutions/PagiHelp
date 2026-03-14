@@ -1,6 +1,6 @@
 # Agent Usage Guide
 
-This file is the agent-facing quick reference for `pagi-help@2.3.0`.
+This file is the agent-facing quick reference for `pagi-help@2.4.0`.
 
 ## Entry Points
 
@@ -47,9 +47,23 @@ Important differences:
 - PostgreSQL-generated table and `ORDER BY` identifiers use double quotes
 - PostgreSQL raw `statement` and `joinQuery` fragments must use PostgreSQL SQL, not MySQL-only functions like `IF()`
 
-PostgreSQL operator translations on `v2`:
+Preferred PostgreSQL operators on `v2`:
 
-- `JSON_CONTAINS` -> `field::jsonb @> ?::jsonb`
+- `ILIKE`
+- `~`
+- `~*`
+- `!~`
+- `!~*`
+- `@>`
+- `<@`
+- `?`
+- `?|`
+- `?&`
+- `&&`
+
+Compatibility aliases still accepted on PostgreSQL `v2`:
+
+- `JSON_CONTAINS` -> `@>`
 - `JSON_OVERLAPS` -> emulated `jsonb` overlap SQL
 - `FIND_IN_SET` -> `array_position(string_to_array(...), ?::text) IS NOT NULL`
 - `RLIKE` -> `~`
@@ -178,26 +192,34 @@ Common operators:
 - `IS`
 - `IS NOT`
 - `LIKE`
-- `RLIKE`
-- `MEMBER OF`
-- `JSON_CONTAINS`
-- `JSON_OVERLAPS`
-- `FIND_IN_SET`
+- `ILIKE`
 
-`IN` examples:
+PostgreSQL-native examples:
 
 ```js
-["stage", "IN", ["NEW", "PROCESSING"]]
-["role", "NOT IN", ["Guest", "Banned"]]
-["role", "! IN", ["Guest"]]
+["metaInfo", "@>", { a: 1 }]
+["metaInfo", "<@", { a: 1, b: 2 }]
+["metaInfo", "?", "role"]
+["metaInfo", "?|", ["role", "status"]]
+["metaInfo", "?&", ["role", "status"]]
+["tags", "&&", ["vip", "beta"]]
+["name", "ILIKE", "%ann%"]
+["email", "~*", "^[a-z]"]
 ```
 
-JSON examples:
+PostgreSQL compatibility examples:
 
 ```js
 ["metaInfo", "JSON_CONTAINS", { a: 1 }]
 ["metaInfo", "JSON_OVERLAPS", { tags: ["vip"] }]
 ["groupId", "MEMBER OF", [1, 2, 3]]
+```
+Shared `IN` examples:
+
+```js
+["stage", "IN", ["NEW", "PROCESSING"]]
+["role", "NOT IN", ["Guest", "Banned"]]
+["role", "! IN", ["Guest"]]
 ```
 
 ## Raw Conditions

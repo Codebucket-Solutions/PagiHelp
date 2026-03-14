@@ -5,7 +5,7 @@ This file records the downstream usage patterns observed in `/Users/abhinavgauta
 ## Version reconciliation
 
 - At audit time, local `index.js` matched the published npm package `pagi-help@1.0.43`.
-- The package version in this repo has since been bumped to `2.3.0`, while the default export still preserves the runtime contract documented here.
+- The package version in this repo has since been bumped to `2.4.0`, while the default export still preserves the runtime contract documented here.
 - npm also has `2.0.0`, but the published `2.0.0` code currently diverges from the `1.0.43` contract in ways that would regress observed consumer behavior.
 
 ## Audit scope

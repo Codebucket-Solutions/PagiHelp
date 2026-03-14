@@ -13,6 +13,34 @@ const serializeMysqlJsonValue = (value) =>
 
 module.exports = {
   name: "mysql",
+  allowedOperators: new Set([
+    ">",
+    ">=",
+    "<",
+    "<=",
+    "=",
+    "!=",
+    "<>",
+    "IN",
+    "NOT IN",
+    "! IN",
+    "IS",
+    "IS NOT",
+    "LIKE",
+    "RLIKE",
+    "MEMBER OF",
+    "JSON_CONTAINS",
+    "JSON_OVERLAPS",
+    "FIND_IN_SET",
+  ]),
+  arrayValueOperators: new Set([
+    "IN",
+    "NOT IN",
+    "! IN",
+    "JSON_CONTAINS",
+    "JSON_OVERLAPS",
+    "MEMBER OF",
+  ]),
 
   quoteIdentifier(identifier) {
     return SqlString.escapeId(identifier);
