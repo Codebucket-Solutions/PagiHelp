@@ -1,6 +1,6 @@
 # PagiHelp Maintenance Baseline
 
-This file captures the actual behavior of the library as shipped in `index.js` at package version `1.1.0`. It is intended to be the pre-change reference for future edits so improvements can be made without accidentally changing existing query-generation behavior.
+This file captures the actual behavior of the library as shipped in `index.js` at package version `1.1.1`. It is intended to be the pre-change reference for future edits so improvements can be made without accidentally changing existing query-generation behavior.
 
 ## Repository shape
 
@@ -207,9 +207,9 @@ Future fixes in these areas should be intentional and accompanied by targeted te
 The current test suite covers:
 
 - Basic single-table query generation with search, filters, sort, and page-based pagination.
+- Direct helper behavior for `columNames()`, `tupleCreator()`, `genSchema()`, and `singleTablePagination()`.
 - CamelCase/snake_case alias resolution and special operators.
 - Multi-table `UNION ALL` generation with alias padding and aggregate total counts.
 - Raw `additionalWhereConditions` subquery support.
+- Current quirks such as `%undefined%` search, dangling `WHERE`, invalid search aliases, and sort-array mutation.
 - Validation failures for invalid filter fields, operators, and sort directions.
-
-The suite does not intentionally lock in the known defects listed above, so those can still be improved deliberately.

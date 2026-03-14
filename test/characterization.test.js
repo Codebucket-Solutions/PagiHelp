@@ -14,6 +14,19 @@ const runQuietly = (fn) => {
   }
 };
 
+const captureLogs = (fn) => {
+  const originalLog = console.log;
+  const logs = [];
+  console.log = (...args) => {
+    logs.push(args);
+  };
+  try {
+    return { result: fn(), logs };
+  } finally {
+    console.log = originalLog;
+  }
+};
+
 const expectThrowString = (fn, expected) => {
   let thrown;
   try {
@@ -238,6 +251,110 @@ test("searchColumnList supports raw statement expressions without aliases", () =
       "SELECT id AS id,(SELECT category_name FROM support_category WHERE id = support_raise_complain.category_id and status != 'Deleted') AS category FROM `support_raise_complain` WHERE (status != ?) AND ( tracking_id LIKE ? OR (SELECT category_name FROM support_category WHERE id = support_raise_complain.category_id and status != 'Deleted') LIKE ?  ) ",
     replacements: ["Deleted", "%BGL%", "%BGL%"],
   });
+});
+
+test("columNames renders plain, prefixed, and statement descriptors with current conversion behavior", () => {
+  const pagiHelp = new PagiHelp({
+    columnNameConverter: (name) =>
+      name.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`),
+  });
+
+  const result = pagiHelp.columNames([
+    { name: "plainField", alias: "plainField" },
+    { name: "createdDate", prefix: "l", alias: "createdDate" },
+    { statement: "COUNT(*)", alias: "countValue" },
+    { statement: "NOW()" },
+  ]);
+
+  assert.deepStrictEqual(result, [
+    "plain_field AS plainField",
+    "l.created_date AS createdDate",
+    "COUNT(*) AS countValue",
+    "NOW()",
+  ]);
+});
+
+test("tupleCreator preserves current validated and raw tuple behavior", () => {
+  const pagiHelp = new PagiHelp();
+
+  const arrayReplacements = [];
+  const arrayQuery = pagiHelp.tupleCreator(
+    ["status", "IN", ["Active", "Paused"]],
+    arrayReplacements
+  );
+
+  const rawReplacements = [];
+  const rawQuery = pagiHelp.tupleCreator(
+    ["status", "IN", "(SELECT status FROM live_statuses)"],
+    rawReplacements,
+    true
+  );
+
+  assert.equal(arrayQuery, "status IN (?,?)");
+  assert.deepStrictEqual(arrayReplacements, ["Active", "Paused"]);
+  assert.equal(rawQuery, "status IN (SELECT status FROM live_statuses)");
+  assert.deepStrictEqual(rawReplacements, []);
+});
+
+test("genSchema preserves current nested AND and OR grouping", () => {
+  const pagiHelp = new PagiHelp();
+  const replacements = [];
+  const result = pagiHelp.genSchema(
+    [
+      ["status", "=", "Active"],
+      [
+        ["stage", "=", "NEW"],
+        ["stage", "=", "PROCESSING"],
+      ],
+      ["created_at", ">=", "2024-01-01"],
+    ],
+    replacements
+  );
+
+  assert.equal(
+    result,
+    "(status = ? AND ( stage = ? OR stage = ?) AND created_at >= ?)"
+  );
+  assert.deepStrictEqual(replacements, [
+    "Active",
+    "NEW",
+    "PROCESSING",
+    "2024-01-01",
+  ]);
+});
+
+test("singleTablePagination keeps joinQuery verbatim and logs replacements once", () => {
+  const pagiHelp = new PagiHelp();
+  const paginationObject = {
+    search: "group",
+  };
+  const searchColumnList = [{ name: "xg.group_name" }];
+  const columnList = [
+    { name: "id", alias: "id", prefix: "xg" },
+    { name: "group_name", alias: "groupName", prefix: "xg" },
+  ];
+
+  const { result, logs } = captureLogs(() =>
+    pagiHelp.singleTablePagination(
+      "xcommunity_groups",
+      paginationObject,
+      searchColumnList,
+      "xg",
+      columnList,
+      [["xg.status", "=", "Active"]]
+    )
+  );
+
+  assert.deepStrictEqual(result, {
+    countQuery:
+      "SELECT xg.id AS id,xg.group_name AS groupName FROM `xcommunity_groups`xg WHERE (xg.status = ?) AND ( xg.group_name LIKE ?  )",
+    totalCountQuery:
+      "SELECT COUNT(*) AS countValue  FROM `xcommunity_groups`xg WHERE (xg.status = ?) AND ( xg.group_name LIKE ?  )",
+    query:
+      "SELECT xg.id AS id,xg.group_name AS groupName FROM `xcommunity_groups`xg WHERE (xg.status = ?) AND ( xg.group_name LIKE ?  )",
+    replacements: ["Active", "%group%"],
+  });
+  assert.deepStrictEqual(logs, [[["Active", "%group%"]]]);
 });
 
 test("searchColumnList supports raw dotted field names without prefix objects", () => {
@@ -484,6 +601,93 @@ test("additionalWhereConditions accept a single raw tuple without an outer array
   });
 });
 
+test("omitting search with searchColumnList present keeps the current %undefined% behavior", () => {
+  const pagiHelp = new PagiHelp();
+  const paginationObject = {
+    pageNo: 1,
+    itemsPerPage: 10,
+  };
+  const options = [
+    {
+      tableName: "users",
+      columnList: [
+        { name: "id", alias: "id" },
+        { name: "email", alias: "email" },
+      ],
+      searchColumnList: [{ name: "email" }],
+    },
+  ];
+
+  const result = runQuietly(() =>
+    pagiHelp.paginate(clone(paginationObject), clone(options))
+  );
+
+  assert.deepStrictEqual(result, {
+    countQuery: "SELECT id AS id,email AS email FROM `users` WHERE ( email LIKE ?  ) ",
+    totalCountQuery:
+      "SELECT COUNT(*) AS countValue  FROM `users` WHERE ( email LIKE ?  )",
+    query:
+      "SELECT id AS id,email AS email FROM `users` WHERE ( email LIKE ?  )  LIMIT ?,?",
+    replacements: ["%undefined%", 0, 10],
+  });
+});
+
+test("empty filters and search keep the current dangling WHERE behavior", () => {
+  const pagiHelp = new PagiHelp();
+  const paginationObject = {
+    search: "",
+  };
+  const options = [
+    {
+      tableName: "events",
+      columnList: [{ name: "id", alias: "id" }],
+      searchColumnList: [],
+    },
+  ];
+
+  const result = runQuietly(() =>
+    pagiHelp.paginate(clone(paginationObject), clone(options))
+  );
+
+  assert.deepStrictEqual(result, {
+    countQuery: "SELECT id AS id FROM `events` WHERE  ",
+    totalCountQuery: "SELECT COUNT(*) AS countValue  FROM `events` WHERE ",
+    query: "SELECT id AS id FROM `events` WHERE  ",
+    replacements: [],
+  });
+});
+
+test("searchColumnList aliases preserve the current invalid SQL shape", () => {
+  const pagiHelp = new PagiHelp();
+  const paginationObject = {
+    search: "mail",
+  };
+  const options = [
+    {
+      tableName: "users",
+      columnList: [
+        { name: "id", alias: "id" },
+        { name: "email", alias: "email" },
+      ],
+      searchColumnList: [{ name: "email", alias: "email" }],
+    },
+  ];
+
+  const result = runQuietly(() =>
+    pagiHelp.paginate(clone(paginationObject), clone(options))
+  );
+
+  assert.deepStrictEqual(result, {
+    countQuery:
+      "SELECT id AS id,email AS email FROM `users` WHERE ( email AS email LIKE ?  ) ",
+    totalCountQuery:
+      "SELECT COUNT(*) AS countValue  FROM `users` WHERE ( email AS email LIKE ?  )",
+    query:
+      "SELECT id AS id,email AS email FROM `users` WHERE ( email AS email LIKE ?  ) ",
+    replacements: ["%mail%"],
+  });
+});
+
 test("parenthesized filter values stay parameterized in regular filters", () => {
   const pagiHelp = new PagiHelp();
   const paginationObject = {
@@ -548,6 +752,32 @@ test("pagination replacements keep offset and limit as the trailing two values",
   assert.deepStrictEqual(result.replacements, ["Active", "%export%", 50, 25]);
   assert.deepStrictEqual(result.replacements.slice(-2), [50, 25]);
   assert.equal(result.query.endsWith("LIMIT ?,?"), true);
+});
+
+test("paginate mutates the caller sort arrays as part of current behavior", () => {
+  const pagiHelp = new PagiHelp();
+  const paginationObject = {
+    search: "",
+    sort: {
+      attributes: ["created_at"],
+      sorts: ["asc"],
+    },
+  };
+  const options = [
+    {
+      tableName: "reports",
+      columnList: [
+        { name: "id", alias: "id" },
+        { name: "created_at", alias: "created_at" },
+      ],
+      searchColumnList: [],
+    },
+  ];
+
+  runQuietly(() => pagiHelp.paginate(paginationObject, clone(options)));
+
+  assert.deepStrictEqual(paginationObject.sort.attributes, ["created_at", "id"]);
+  assert.deepStrictEqual(paginationObject.sort.sorts, ["ASC", "DESC"]);
 });
 
 test("additionalWhereConditions bypass operator allow-list in raw mode", () => {

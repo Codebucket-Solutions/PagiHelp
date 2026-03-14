@@ -2,7 +2,7 @@
 
 Generalized API helper for MySQL search, filters, sorting, and pagination.
 
-This repository now treats the current `1.1.0` runtime behavior as the stable contract.
+This repository now treats the current `1.1.1` runtime behavior as the stable contract.
 
 ## Installation
 
@@ -338,7 +338,7 @@ Current behavior:
 
 ## Important Runtime Notes
 
-These are current real behaviors of `1.1.0`:
+These are current real behaviors of `1.1.1`:
 
 - `joinQuery` is concatenated directly after ``FROM `tableName``` with no normalization
 - if `search` is omitted and `searchColumnList` is non-empty, the library searches for `%undefined%`
