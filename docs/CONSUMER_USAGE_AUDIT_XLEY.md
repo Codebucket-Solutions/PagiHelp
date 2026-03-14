@@ -5,7 +5,7 @@ This file records the additional `pagi-help` usage patterns observed in `/Users/
 ## Version alignment
 
 - The audited application depends on `pagi-help@^1.0.43`.
-- This repository is now versioned as `1.1.2`, while preserving the `1.0.43` runtime contract that the audited application depends on.
+- This repository is now versioned as `1.2.0`, while preserving the `1.0.43` runtime contract that the audited application depends on.
 
 ## Audit summary
 

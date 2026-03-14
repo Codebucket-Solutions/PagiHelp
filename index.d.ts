@@ -28,6 +28,61 @@ declare class PagiHelp {
 
   getFilterFieldName(column: PagiHelp.ColumnDescriptor): string;
 
+  createValidationResult(): PagiHelp.ValidationResult;
+
+  addValidationIssue(
+    result: PagiHelp.ValidationResult,
+    level: "errors" | "warnings",
+    message: string
+  ): PagiHelp.ValidationResult;
+
+  mergeValidationResults(
+    target: PagiHelp.ValidationResult,
+    source: PagiHelp.ValidationResult
+  ): PagiHelp.ValidationResult;
+
+  isConditionTuple(value: unknown): value is PagiHelp.ConditionTuple;
+
+  validateConditionTuple(
+    tuple: PagiHelp.ConditionTuple,
+    path: string,
+    result: PagiHelp.ValidationResult,
+    asItIs?: boolean
+  ): PagiHelp.ValidationResult;
+
+  validateConditionInput(
+    input: PagiHelp.ConditionInput,
+    path: string,
+    result: PagiHelp.ValidationResult,
+    asItIs?: boolean
+  ): PagiHelp.ValidationResult;
+
+  validateSortInput(
+    sort: PagiHelp.SortInput,
+    path: string,
+    result: PagiHelp.ValidationResult
+  ): PagiHelp.ValidationResult;
+
+  validateColumnDescriptor(
+    descriptor: PagiHelp.ColumnDescriptor | PagiHelp.SearchColumnDescriptor,
+    path: string,
+    result: PagiHelp.ValidationResult,
+    forSearch?: boolean
+  ): PagiHelp.ValidationResult;
+
+  validatePaginationObject(
+    paginationObject: PagiHelp.PaginationInput
+  ): PagiHelp.ValidationResult;
+
+  validateOptions(
+    options: PagiHelp.PaginationOption[]
+  ): PagiHelp.ValidationResult;
+
+  validatePaginationInput(
+    paginationObject: PagiHelp.PaginationInput,
+    options: PagiHelp.PaginationOption[]
+  ): PagiHelp.ValidationResult;
+
   processFilterCondition(
     condition: PagiHelp.ConditionInput,
     columnList: PagiHelp.ColumnDescriptor[]
@@ -233,6 +288,12 @@ declare namespace PagiHelp {
      * Raw-mode conditions. Operators are not validated here.
      */
     additionalWhereConditions?: ConditionInput | [];
+  }
+
+  interface ValidationResult {
+    valid: boolean;
+    errors: string[];
+    warnings: string[];
   }
 
   interface BaseQueries {

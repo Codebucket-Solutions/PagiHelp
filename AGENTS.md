@@ -12,6 +12,7 @@ Use the current runtime behavior as the source of truth.
 ## Use The Library This Way
 
 - Prefer `paginate()` for application code. The other methods are callable, but they are helper-level APIs.
+- Prefer `validatePaginationInput()` before wiring new integrations or generating code automatically.
 - Always set `paginationObject.search` to a string. Use `""` when search is disabled.
 - Always pass `searchColumnList`. Use `[]` if there is no searchable column.
 - Top-level `filters` items mean `AND`. Nested arrays mean `OR`.

@@ -1,6 +1,6 @@
 # Agent Usage Guide
 
-This file is the agent-facing quick reference for `pagi-help@1.1.2`.
+This file is the agent-facing quick reference for `pagi-help@1.2.0`.
 
 Use this file for normal integration work. Use `docs/MAINTENANCE_BASELINE.md` when you need exact behavior details and quirks.
 
@@ -74,6 +74,36 @@ return {
 ```
 
 If you intentionally use `countQuery`, remember that it returns rows, not `COUNT(*)`.
+
+## Validation Helpers
+
+Use these helpers before wiring generated code into an app:
+
+```js
+const report = pagiHelp.validatePaginationInput(paginationObject, options);
+
+if (!report.valid) {
+  throw new Error(report.errors.join("\n"));
+}
+```
+
+Available helpers:
+
+- `validatePaginationObject(paginationObject)`
+- `validateOptions(options)`
+- `validatePaginationInput(paginationObject, options)`
+
+Return shape:
+
+```js
+{
+  valid: true,
+  errors: [],
+  warnings: []
+}
+```
+
+These helpers report risky or broken input, but they do not mutate or change `paginate()` behavior.
 
 ## `columnList` Shapes
 

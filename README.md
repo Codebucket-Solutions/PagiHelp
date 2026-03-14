@@ -2,7 +2,7 @@
 
 Generalized API helper for MySQL search, filters, sorting, and pagination.
 
-This repository now treats the current `1.1.2` runtime behavior as the stable contract.
+This repository now treats the current `1.2.0` runtime behavior as the stable contract.
 
 ## Installation
 
@@ -72,6 +72,30 @@ That runs:
 - the characterization suite
 - declaration-file validation
 - `npm pack --dry-run`
+
+## Validation Helpers
+
+The package now includes additive validation helpers that do not change `paginate()` behavior:
+
+```js
+const report = pagiHelp.validatePaginationInput(body, options);
+
+if (!report.valid) {
+  console.error(report.errors);
+}
+
+if (report.warnings.length > 0) {
+  console.warn(report.warnings);
+}
+```
+
+Available helpers:
+
+- `validatePaginationObject(paginationObject)`
+- `validateOptions(options)`
+- `validatePaginationInput(paginationObject, options)`
+
+These helpers are intended for preflight checks in apps, wrappers, and AI-generated integrations.
 
 ## Quick Start
 
@@ -353,7 +377,7 @@ Current behavior:
 
 ## Important Runtime Notes
 
-These are current real behaviors of `1.1.2`:
+These are current real behaviors of `1.2.0`:
 
 - `joinQuery` is concatenated directly after ``FROM `tableName``` with no normalization
 - if `search` is omitted and `searchColumnList` is non-empty, the library searches for `%undefined%`

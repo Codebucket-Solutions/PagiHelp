@@ -1,6 +1,6 @@
 # PagiHelp Maintenance Baseline
 
-This file captures the actual behavior of the library as shipped in `index.js` at package version `1.1.2`. It is intended to be the pre-change reference for future edits so improvements can be made without accidentally changing existing query-generation behavior.
+This file captures the actual behavior of the library as shipped in `index.js` at package version `1.2.0`. It is intended to be the pre-change reference for future edits so improvements can be made without accidentally changing existing query-generation behavior.
 
 ## Repository shape
 
@@ -43,6 +43,9 @@ These methods are implemented as instance fields on the class and are therefore 
 - `columNames(arr)` renders column descriptors into SQL select/search fragments.
 - `tupleCreator(tuple, replacements, asItIs)` converts one `[field, operator, value]` tuple into SQL and appends bound values.
 - `genSchema(schemaArray, replacements, asItIs)` recursively converts nested filter arrays into grouped `AND` / `OR` SQL.
+- `createValidationResult()`, `addValidationIssue()`, and `mergeValidationResults()` build validation reports.
+- `isConditionTuple()`, `validateConditionTuple()`, `validateConditionInput()`, `validateSortInput()`, and `validateColumnDescriptor()` are the lower-level validation helpers.
+- `validatePaginationObject(paginationObject)`, `validateOptions(options)`, and `validatePaginationInput(paginationObject, options)` report errors and warnings without changing runtime behavior.
 - `singleTablePagination(tableName, paginationObject, searchColumnList, joinQuery, columnList, additionalWhereConditions)` builds one table-specific `SELECT`, `countQuery`, `totalCountQuery`, and replacement list.
 - `filler(data)` aligns `columnList` aliases across multiple option blocks by inserting `(NULL)` placeholders so `UNION ALL` projections match.
 - `paginate(paginationObject, options)` is the main public entry point; it unions table queries, applies ordering, and applies offset pagination.
@@ -210,6 +213,7 @@ The current test suite covers:
 
 - Basic single-table query generation with search, filters, sort, and page-based pagination.
 - Direct helper behavior for `columNames()`, `tupleCreator()`, `genSchema()`, and `singleTablePagination()`.
+- Validation helpers for pagination objects, options, and combined input checking.
 - CamelCase/snake_case alias resolution and special operators.
 - Multi-table `UNION ALL` generation with alias padding and aggregate total counts.
 - Raw `additionalWhereConditions` subquery support.

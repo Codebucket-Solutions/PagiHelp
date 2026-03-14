@@ -892,6 +892,112 @@ test("validated filter operators keep their current SQL shapes", () => {
   });
 });
 
+test("validatePaginationObject reports structural errors and compatibility warnings", () => {
+  const pagiHelp = new PagiHelp();
+  const result = pagiHelp.validatePaginationObject({
+    sort: {
+      attributes: ["created_at"],
+      sorts: ["asc", "sideways"],
+    },
+    pageNo: 1,
+  });
+
+  assert.deepStrictEqual(result, {
+    valid: false,
+    errors: [
+      "paginationObject.sort.attributes and paginationObject.sort.sorts must have the same length",
+      "paginationObject.sort.sorts[1] must be ASC or DESC",
+      "paginationObject.pageNo and paginationObject.itemsPerPage must either both be provided or both be omitted",
+    ],
+    warnings: [
+      'paginationObject.search is undefined; current paginate() will search for "%undefined%" when searchColumnList is non-empty',
+      "paginationObject.sort will be mutated by paginate()",
+    ],
+  });
+});
+
+test("validateOptions reports unsafe option shapes without changing runtime behavior", () => {
+  const pagiHelp = new PagiHelp();
+  const result = pagiHelp.validateOptions([
+    {
+      tableName: "users",
+      columnList: [
+        { name: "id", alias: "id" },
+        { name: "email" },
+      ],
+      searchColumnList: [{ name: "email", alias: "email" }],
+      joinQuery: "u",
+    },
+  ]);
+
+  assert.deepStrictEqual(result, {
+    valid: false,
+    errors: [
+      "options[0].searchColumnList[0].alias is not supported in searchColumnList",
+    ],
+    warnings: [
+      "options[0].columnList[1].alias is recommended for filters, sorts, and unions",
+      "options[0].joinQuery is concatenated verbatim; ensure required whitespace and SQL syntax are included",
+    ],
+  });
+});
+
+test("validatePaginationInput checks filter fields against each option", () => {
+  const pagiHelp = new PagiHelp();
+  const result = pagiHelp.validatePaginationInput(
+    {
+      search: "",
+      filters: ["missing", "=", 1],
+    },
+    [
+      {
+        tableName: "events",
+        columnList: [
+          { name: "id", alias: "id" },
+          { name: "status", alias: "status" },
+        ],
+        searchColumnList: [],
+      },
+    ]
+  );
+
+  assert.deepStrictEqual(result, {
+    valid: false,
+    errors: [
+      "paginationObject.filters are invalid for options[0]: Invalid filter field: missing",
+    ],
+    warnings: [],
+  });
+});
+
+test("validatePaginationInput accepts valid legacy input without forcing behavior changes", () => {
+  const pagiHelp = new PagiHelp();
+  const result = pagiHelp.validatePaginationInput(
+    {
+      search: "",
+      filters: ["status", "=", "Active"],
+      pageNo: 1,
+      itemsPerPage: 25,
+    },
+    [
+      {
+        tableName: "events",
+        columnList: [
+          { name: "id", alias: "id" },
+          { name: "status", alias: "status" },
+        ],
+        searchColumnList: [],
+      },
+    ]
+  );
+
+  assert.deepStrictEqual(result, {
+    valid: true,
+    errors: [],
+    warnings: [],
+  });
+});
+
 test("invalid filter fields, operators, and sort values throw the current string errors", () => {
   const pagiHelp = new PagiHelp();
 
