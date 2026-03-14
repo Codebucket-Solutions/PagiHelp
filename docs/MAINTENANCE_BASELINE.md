@@ -1,17 +1,17 @@
 # PagiHelp Legacy Maintenance Baseline
 
-This file captures the legacy default-export behavior preserved in `index.js` at package version `2.1.0`. It remains the compatibility reference for `require("pagi-help")` and `PagiHelpLegacy`.
+This file captures the legacy default-export behavior preserved in `index.js` at package version `2.2.0`. It remains the compatibility reference for `require("pagi-help")` and `PagiHelpLegacy`.
 
 ## Repository shape
 
 - `index.js` contains the legacy default-export runtime implementation.
-- `v2.js` contains the new `2.1.0` class built on the `1.3.0` safe path.
+- `v2.js` contains the current hardened `v2` class built on the `1.3.0` safe path.
 - `index.d.ts` provides machine-readable API shapes for editors and AI agents.
 - `v2.d.ts` provides the subpath declaration file for `require("pagi-help/v2")`.
 - `AGENTS.md` provides repo-specific usage and change instructions for AI agents.
-- `README.md` covers the primary `2.1.0` usage path and the legacy split.
-- `docs/AGENT_USAGE.md` provides agent-facing canonical usage examples for the `2.1.0` class.
-- `docs/V2_1_0_BASELINE.md` records the maintainer contract for the new class.
+- `README.md` covers the primary `v2` usage path and the legacy split.
+- `docs/AGENT_USAGE.md` provides agent-facing canonical usage examples for the current `v2` class.
+- `docs/V2_BASELINE.md` records the maintainer contract for the current `v2` class.
 - `docs/legacy/README.md` and `docs/legacy/AGENT_USAGE_1.3.0.md` preserve the legacy guidance.
 - `examples/` provides runnable example setups for single-table, joined-table, and union usage.
 - `diagram.png` is a high-level concept diagram, not an exact representation of the generated SQL.
@@ -28,7 +28,7 @@ The default export remains the legacy class:
 const PagiHelp = require("pagi-help");
 ```
 
-The package now also ships a separate `2.1.0` class, but that contract is documented in `docs/V2_1_0_BASELINE.md`.
+The package now also ships a separate `v2` class, but that contract is documented in `docs/V2_BASELINE.md`.
 
 Constructor:
 

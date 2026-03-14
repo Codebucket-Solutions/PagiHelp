@@ -1,20 +1,20 @@
 # Agent Usage Guide
 
-This file is the agent-facing quick reference for `pagi-help@2.1.0`.
+This file is the agent-facing quick reference for `pagi-help@2.2.0`.
 
-The package now ships two explicit entrypoints:
+The package ships two explicit entrypoints:
 
-- `require("pagi-help/v2")` or `require("pagi-help").PagiHelpV210`: new `2.1.0` class
-- `require("pagi-help")`: legacy default export, preserved for compatibility
+- `require("pagi-help/v2")` or `require("pagi-help").PagiHelpV2`: current hardened `v2` class
+- `require("pagi-help")`: frozen legacy default export
 
 ## Choose The Right Entry Point
 
-Use `PagiHelpV210` for:
+Use `PagiHelpV2` for:
 
 - new integrations
 - AI-generated code
 - code that wants aggregate `countQuery`
-- code that should avoid sort mutation, option mutation, dangling `WHERE`, and `%undefined%` search behavior
+- code that should avoid dangling `WHERE`, `%undefined%`, sort mutation, raw string throws, and missing `searchColumnList` crashes
 
 Use the legacy default export only for:
 
@@ -29,13 +29,13 @@ Do not switch an existing legacy import to `v2` unless the caller is intentional
 Preferred:
 
 ```js
-const PagiHelpV210 = require("pagi-help/v2");
+const PagiHelpV2 = require("pagi-help/v2");
 ```
 
 Also supported:
 
 ```js
-const { PagiHelpV210, PagiHelpV2 } = require("pagi-help");
+const { PagiHelpV2, PagiHelpV210 } = require("pagi-help");
 ```
 
 Legacy:
@@ -50,27 +50,28 @@ const { PagiHelpLegacy } = require("pagi-help");
 Shared constructor option:
 
 ```js
-const pagiHelp = new PagiHelpV210({
+const pagiHelp = new PagiHelpV2({
   columnNameConverter: (name) => name,
 });
 ```
 
 `columnNameConverter` is applied when rendering selected columns and `ORDER BY` fields.
 
-`2.1.0` also accepts default safe overrides:
+`v2` also accepts one optional safe flag:
 
 ```js
-const pagiHelp = new PagiHelpV210({
+const pagiHelp = new PagiHelpV2({
   safeOptions: {
-    countQueryMode: "select",
-    emptyInStrategy: "static",
+    validate: true,
   },
 });
 ```
 
+`validate` is the only supported `safeOptions` key on `v2`.
+
 ## Main API
 
-`2.1.0`:
+`v2`:
 
 ```js
 const result = pagiHelp.paginate(paginationObject, options);
@@ -95,14 +96,14 @@ Return shape stays the same in both classes:
 
 Important semantics:
 
-- `2.1.0` default `countQuery` is aggregate
+- `v2` `countQuery` is aggregate
 - legacy `countQuery` is row-select
 - `totalCountQuery` remains available in both paths
 - `query` is the data query with optional `ORDER BY` and `LIMIT`
 
 ## Recommended Execution Pattern
 
-For `2.1.0`, either aggregate count query is safe:
+For `v2`, use the aggregate count query directly:
 
 ```js
 const queries = pagiHelp.paginate(paginationObject, options);
@@ -120,69 +121,42 @@ const data = await sequelize.query(queries.query, {
 
 For legacy integrations, prefer `totalCountQuery` for actual totals because legacy `countQuery` is not aggregate.
 
-## `2.1.0` Default Behavior
+## `v2` Contract
 
-`PagiHelpV210#paginate()` is built on the `1.3.0` safe path.
+`PagiHelpV2#paginate()` is built on the old safe path, but the behavior is now fixed rather than compatibility-tunable.
 
-Defaults:
+`v2`:
 
-- clone caller sort arrays
-- clone option arrays before `filler()` inserts `(NULL)` padding
-- normalize `joinQuery` to include leading whitespace
-- coerce missing `search` to `""`
-- omit empty `WHERE`
-- reject `searchColumnList.alias`
-- reject empty `IN` arrays
-- return aggregate `countQuery`
-- validate before generating SQL
-- avoid the legacy `console.log(replacements)` side effect
+- clones caller sort arrays
+- clones option arrays before `filler()` inserts `(NULL)` padding
+- normalizes `joinQuery` to include leading whitespace
+- coerces missing `search` to `""`
+- treats missing `searchColumnList` as `[]`
+- omits empty `WHERE`
+- rejects `searchColumnList.alias`
+- rejects empty `IN` arrays
+- returns aggregate `countQuery`
+- validates before generating SQL by default
+- avoids the legacy `console.log(replacements)` side effect
+- throws `Error` objects instead of string throws
 
-## Compatibility Levers In `2.1.0`
+## `v2` Overrides
 
-Per-call safe overrides:
+Per-call overrides:
 
 ```js
 const queries = pagiHelp.paginate(paginationObject, options, {
-  countQueryMode: "select",
-  emptyInStrategy: "static",
-  rejectSearchAliases: false,
+  validate: true,
 });
 ```
 
-Supported flags:
+That is the only supported override key.
 
-```js
-{
-  cloneSort: true,
-  cloneOptions: true,
-  normalizeJoinQuery: true,
-  coerceUndefinedSearchToEmpty: true,
-  omitEmptyWhere: true,
-  rejectSearchAliases: true,
-  emptyInStrategy: "throw",
-  countQueryMode: "aggregate",
-  validate: true
-}
-```
-
-Legacy escape hatch from a `2.1.0` instance:
+If the caller needs old `countQueryMode`, `emptyInStrategy`, or similar legacy toggles, use the legacy export or call:
 
 ```js
 const legacyQueries = pagiHelp.paginateLegacy(paginationObject, options);
 ```
-
-This intentionally uses the legacy default-export behavior with the current `columnNameConverter`.
-
-## Legacy Bridge Still Exists
-
-The legacy class still has:
-
-- `validatePaginationObject()`
-- `validateOptions()`
-- `validatePaginationInput()`
-- `paginateSafe()`
-
-That bridge is still useful for incremental migration, but it is not the preferred path for new code. For new work, start with `PagiHelpV210`.
 
 ## `columnList` Shapes
 
@@ -229,10 +203,10 @@ Supported search descriptors:
 
 Rules:
 
-- do not use `alias` here for new code
+- do not use `alias` here in `v2`
 - statement-backed search expressions are allowed
 - raw dotted names like `xg.group_name` are allowed
-- pass `[]` when there are no searchable columns
+- missing `searchColumnList` is treated as `[]`
 
 ## Filter Structure
 
@@ -256,41 +230,12 @@ Boolean semantics:
 - nested arrays become `OR` groups
 - nesting is recursive
 
-Examples:
-
-```js
-[
-  ["status", "=", "Active"],
-  ["createdDate", ">=", "2024-01-01"]
-]
-```
-
-```js
-[
-  ["status", "=", "Active"],
-  [
-    ["stage", "=", "NEW"],
-    ["stage", "=", "PROCESSING"]
-  ]
-]
-```
-
-That second example means:
-
-```sql
-status = ? AND (stage = ? OR stage = ?)
-```
-
-## Filter Field Resolution
-
 Filter fields can target:
 
 - exact aliases like `"createdDate"`
 - snake_case forms of camelCase aliases like `"created_date"`
 - literal `prefix.name` values like `"l.stage"`
 - statement-backed aliases
-
-If no column matches, the legacy contract throws `Invalid filter field: <field>`.
 
 ## Supported Operators
 
@@ -328,11 +273,7 @@ Examples:
 ["tags", "FIND_IN_SET", "vip"]
 ```
 
-Notes:
-
-- `IN`-style operators should receive arrays
-- `2.1.0` rejects empty arrays by default
-- legacy raw `additionalWhereConditions` may inline parenthesized subqueries
+In `v2`, empty arrays for `IN`-style operators are rejected cleanly.
 
 ## Sorting And Pagination
 
@@ -349,7 +290,8 @@ Rules:
 
 - sort directions must resolve to `ASC` or `DESC`
 - legacy `paginate()` mutates sort arrays by appending `id DESC`
-- `2.1.0` clones sort arrays before applying the same tie-breaker
+- `v2` clones sort arrays before applying the same tie-breaker
+- `v2` direct helper calls like `buildOrderByQuery()` also avoid mutating caller sort arrays
 
 Pagination modes:
 
@@ -364,7 +306,7 @@ Treat these as trusted-input-only:
 - `joinQuery`
 - raw `additionalWhereConditions`
 
-`joinQuery` is still string-concatenated SQL. `2.1.0` only normalizes leading whitespace by default; it does not sanitize SQL.
+`joinQuery` is still string-concatenated SQL. `v2` normalizes leading whitespace, but it does not sanitize SQL.
 
 ## Legacy References
 

@@ -1,6 +1,6 @@
 # Legacy Default Export Archive
 
-This folder preserves the guidance for the legacy default export that is still shipped by `pagi-help@2.1.0`.
+This folder preserves the guidance for the legacy default export that is still shipped by `pagi-help@2.2.0`.
 
 Import forms:
 

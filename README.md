@@ -1,9 +1,9 @@
 # PagiHelp
 
-`pagi-help@2.1.0` ships two APIs from one package.
+`pagi-help@2.2.0` ships two APIs from one package.
 
-- `require("pagi-help")` keeps the legacy `1.3.0` / `1.x` contract exactly.
-- `require("pagi-help/v2")` or `require("pagi-help").PagiHelpV210` is the new `2.1.0` class for new code.
+- `require("pagi-help")` keeps the legacy `1.x` / `1.3.0` contract exactly.
+- `require("pagi-help/v2")` is the hardened `v2` API for new code.
 
 ## Installation
 
@@ -16,9 +16,9 @@ npm install pagi-help
 Preferred for new integrations:
 
 ```js
-const PagiHelpV210 = require("pagi-help/v2");
+const PagiHelpV2 = require("pagi-help/v2");
 
-const pagiHelp = new PagiHelpV210();
+const pagiHelp = new PagiHelpV2();
 ```
 
 Legacy compatibility for existing applications:
@@ -34,17 +34,19 @@ Named exports are also available:
 ```js
 const {
   PagiHelpLegacy,
-  PagiHelpV210,
   PagiHelpV2,
+  PagiHelpV210,
 } = require("pagi-help");
 ```
 
-## Quick Start: `2.1.0`
+`PagiHelpV210` remains as a compatibility alias. New docs use `PagiHelpV2`.
+
+## Quick Start: `v2`
 
 ```js
-const PagiHelpV210 = require("pagi-help/v2");
+const PagiHelpV2 = require("pagi-help/v2");
 
-const pagiHelp = new PagiHelpV210({
+const pagiHelp = new PagiHelpV2({
   columnNameConverter: (name) =>
     name.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`),
 });
@@ -100,11 +102,11 @@ Return shape:
 }
 ```
 
-`2.1.0` semantics:
+`v2` semantics:
 
 - `query` is the data query with optional `ORDER BY` and `LIMIT`
-- `countQuery` is aggregate by default
-- `totalCountQuery` is also aggregate and stays available for compatibility
+- `countQuery` is an actual aggregate count query
+- `totalCountQuery` remains aggregate for return-shape compatibility
 - `replacements` contains the bound values in execution order
 
 Legacy default-export semantics:
@@ -113,26 +115,26 @@ Legacy default-export semantics:
 - `countQuery` is still the old row-select query
 - `totalCountQuery` is still the real aggregate count query
 
-## What `2.1.0` Changes
+## What `v2` Fixes
 
-`PagiHelpV210` makes the old safe path the default `paginate()` behavior.
+The hardened `v2` path now:
 
-Default behavior in the new class:
+- stops emitting dangling `WHERE`
+- stops turning missing `search` into `%undefined%`
+- stops mutating caller sort arrays
+- stops logging replacements by default
+- makes `countQuery` an actual aggregate count
+- rejects `alias` in `searchColumnList`
+- normalizes `joinQuery`
+- treats missing `searchColumnList` as `[]`
+- rejects empty `IN` arrays cleanly
+- throws `Error` objects instead of string throws
 
-- does not mutate caller sort arrays
-- does not mutate caller option objects before union padding
-- normalizes `joinQuery` spacing
-- coerces missing `search` to `""`
-- omits dangling `WHERE`
-- rejects `searchColumnList.alias`
-- rejects empty `IN` arrays
-- uses aggregate `countQuery`
-- validates inputs before generating SQL
-- does not log replacements from `singleTablePagination()`
+These rules are the contract for `require("pagi-help/v2")`.
 
 ## Shared Input Model
 
-The data model stays the same across legacy and `2.1.0`.
+The overall query model stays the same across legacy and `v2`.
 
 `paginationObject`:
 
@@ -155,11 +157,16 @@ The data model stays the same across legacy and `2.1.0`.
 }
 ```
 
+In `v2`:
+
+- `search` is optional and defaults to `""`
+- `searchColumnList` is optional and defaults to `[]`
+
 Filter semantics:
 
 - top-level entries are joined with `AND`
 - nested arrays become `OR` groups
-- supported tuples use `[field, operator, value]`
+- tuples use `[field, operator, value]`
 
 Common `columnList` shapes:
 
@@ -178,37 +185,35 @@ Common `searchColumnList` shapes:
 { statement: "(SELECT category_name FROM support_category WHERE id = src.category_id)" }
 ```
 
-Do not put `alias` in `searchColumnList` for new code.
+Do not put `alias` in `searchColumnList` for `v2`.
 
-## Compatibility Levers
+## `v2` Options
 
-Constructor defaults for the new class:
+`v2` no longer exposes the old compatibility toggles like `countQueryMode`, `emptyInStrategy`, or `rejectSearchAliases`.
+
+The only supported `safeOptions` key is:
 
 ```js
-const pagiHelp = new PagiHelpV210({
+const pagiHelp = new PagiHelpV2({
   safeOptions: {
-    countQueryMode: "select",
-    emptyInStrategy: "static",
+    validate: true,
   },
 });
 ```
 
-Per-call overrides:
+Per-call:
 
 ```js
 const queries = pagiHelp.paginate(paginationObject, options, {
-  countQueryMode: "select",
-  rejectSearchAliases: false,
+  validate: true,
 });
 ```
 
-Legacy escape hatch from a `2.1.0` instance:
+If you need the legacy quirks for a specific call from a `v2` instance, use:
 
 ```js
 const legacyQueries = pagiHelp.paginateLegacy(paginationObject, options);
 ```
-
-Legacy class still exposes `paginateSafe()`, but new integrations should prefer the dedicated `v2` class instead of layering new work onto the legacy export.
 
 ## Legacy Contract Still Ships
 
@@ -220,14 +225,14 @@ This package does not force old users onto the new behavior.
 
 ## Docs Map
 
-- `docs/AGENT_USAGE.md`: primary quick reference for `2.1.0`
-- `docs/V2_1_0_BASELINE.md`: detailed maintainer contract for the new class
+- `docs/AGENT_USAGE.md`: primary quick reference for current `v2`
+- `docs/V2_BASELINE.md`: detailed maintainer contract for current `v2`
 - `docs/MAINTENANCE_BASELINE.md`: legacy default-export contract
 - `docs/legacy/README.md`: legacy archive entrypoint
 - `docs/legacy/AGENT_USAGE_1.3.0.md`: legacy agent quick reference
 - `docs/CONSUMER_USAGE_AUDIT.md`: downstream legacy usage audit
 - `docs/CONSUMER_USAGE_AUDIT_XLEY.md`: second downstream legacy usage audit
-- `test/characterization.test.js`: regression suite for both legacy and `2.1.0`
+- `test/characterization.test.js`: regression suite for both legacy and `v2`
 - `examples/`: runnable examples, including `examples/v2.js`
 
 ## Release Verification

@@ -1,10 +1,6 @@
-const PagiHelpV210 = require("../v2");
+const PagiHelpV2 = require("../v2");
 
-const pagiHelp = new PagiHelpV210({
-  safeOptions: {
-    countQueryMode: "aggregate",
-  },
-});
+const pagiHelp = new PagiHelpV2();
 
 const paginationObject = {
   search: "Active",
