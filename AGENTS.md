@@ -36,4 +36,4 @@ Use the current runtime behavior as the source of truth.
 - Preserve SQL string shape unless the behavior change is intentional.
 - Update `docs/MAINTENANCE_BASELINE.md` if the contract changes.
 - Add or update characterization tests in `test/characterization.test.js`.
-- Run `npm test`.
+- Run `npm run release:verify`.

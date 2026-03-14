@@ -2,7 +2,7 @@
 
 Generalized API helper for MySQL search, filters, sorting, and pagination.
 
-This repository now treats the current `1.1.1` runtime behavior as the stable contract.
+This repository now treats the current `1.1.2` runtime behavior as the stable contract.
 
 ## Installation
 
@@ -24,6 +24,7 @@ Use these files as the authoritative references for the current behavior:
 - `docs/AGENT_USAGE.md`: concise usage guide for AI agents and maintainers
 - `docs/MAINTENANCE_BASELINE.md`: detailed runtime contract and known quirks
 - `test/characterization.test.js`: regression suite for current SQL generation behavior
+- `examples/`: runnable example query-generation setups
 
 ## Main API
 
@@ -57,6 +58,20 @@ Important:
 
 - `countQuery` is not `COUNT(*)`
 - use `totalCountQuery` when you need the real total count
+
+## Release Verification
+
+Before publishing, run:
+
+```bash
+npm run release:verify
+```
+
+That runs:
+
+- the characterization suite
+- declaration-file validation
+- `npm pack --dry-run`
 
 ## Quick Start
 
@@ -338,7 +353,7 @@ Current behavior:
 
 ## Important Runtime Notes
 
-These are current real behaviors of `1.1.1`:
+These are current real behaviors of `1.1.2`:
 
 - `joinQuery` is concatenated directly after ``FROM `tableName``` with no normalization
 - if `search` is omitted and `searchColumnList` is non-empty, the library searches for `%undefined%`

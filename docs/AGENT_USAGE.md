@@ -1,6 +1,6 @@
 # Agent Usage Guide
 
-This file is the agent-facing quick reference for `pagi-help@1.1.1`.
+This file is the agent-facing quick reference for `pagi-help@1.1.2`.
 
 Use this file for normal integration work. Use `docs/MAINTENANCE_BASELINE.md` when you need exact behavior details and quirks.
 

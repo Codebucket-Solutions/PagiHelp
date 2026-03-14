@@ -1,12 +1,25 @@
 {
   "name": "pagi-help",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Pagination Api Helper For Mysql",
   "main": "index.js",
   "types": "index.d.ts",
   "scripts": {
-    "test": "node test/characterization.test.js"
+    "test": "node test/characterization.test.js",
+    "typecheck": "npx -p typescript tsc --noEmit --skipLibCheck index.d.ts",
+    "pack:dry-run": "npm pack --dry-run",
+    "release:verify": "npm test && npm run typecheck && npm run pack:dry-run",
+    "prepublishOnly": "npm run release:verify"
   },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "README.md",
+    "LICENSE",
+    "diagram.png",
+    "docs/AGENT_USAGE.md",
+    "examples/"
+  ],
   "keywords": [
     "pagination",
     "mysql",

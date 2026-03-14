@@ -1,6 +1,6 @@
 # PagiHelp Maintenance Baseline
 
-This file captures the actual behavior of the library as shipped in `index.js` at package version `1.1.1`. It is intended to be the pre-change reference for future edits so improvements can be made without accidentally changing existing query-generation behavior.
+This file captures the actual behavior of the library as shipped in `index.js` at package version `1.1.2`. It is intended to be the pre-change reference for future edits so improvements can be made without accidentally changing existing query-generation behavior.
 
 ## Repository shape
 
@@ -9,6 +9,7 @@ This file captures the actual behavior of the library as shipped in `index.js` a
 - `AGENTS.md` provides repo-specific usage and change instructions for AI agents.
 - `README.md` covers the main current usage contract and high-value caveats, but `docs/AGENT_USAGE.md` and this file remain the authoritative references for edge cases.
 - `docs/AGENT_USAGE.md` provides agent-facing canonical usage examples for the current runtime contract.
+- `examples/` provides runnable example setups for single-table, joined-table, and union usage.
 - `diagram.png` is a high-level concept diagram, not an exact representation of the generated SQL.
 - `docs/COMMIT_HISTORY_NOTES.md` traces every meaningful commit and maps it to current regression coverage.
 - `docs/CONSUMER_USAGE_AUDIT.md` records real downstream usage patterns from an audited application and the invariants they depend on.
@@ -201,6 +202,7 @@ Future fixes in these areas should be intentional and accompanied by targeted te
 - Preserve union alias padding with `(NULL)` unless all union consumers are updated together.
 - When fixing a known limitation, add a new characterization test that documents the intentional behavior change.
 - Re-run `npm test` after every change; the test suite is intended to catch query-string regressions quickly.
+- Run `npm run release:verify` before publishing so tests, typings, and package contents are verified together.
 
 ## Characterization coverage
 
