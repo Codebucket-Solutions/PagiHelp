@@ -1,10 +1,11 @@
 {
   "name": "pagi-help",
-  "version": "1.0.20",
+  "version": "1.1.0",
   "description": "Pagination Api Helper For Mysql",
   "main": "index.js",
+  "types": "index.d.ts",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node test/characterization.test.js"
   },
   "keywords": [
     "pagination",
