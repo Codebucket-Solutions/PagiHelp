@@ -1,12 +1,12 @@
 # PagiHelp v2 Baseline
 
-This file captures the current `v2` contract shipped by `v2.js` at package version `2.4.1`.
+This file captures the current `v2` contract shipped by `v2.js` at package version `2.5.0`.
 
 `v2` is grounded on the old `1.3.0` safe path, but it is now a hardened contract with dialect-aware SQL rendering.
 
 ## Export Map
 
-Package `2.4.1` ships two explicit class contracts:
+Package `2.5.0` ships two explicit class contracts:
 
 - `require("pagi-help")` -> legacy `PagiHelp` default export from `index.js`
 - `require("pagi-help").PagiHelpLegacy` -> same legacy class
@@ -89,6 +89,8 @@ Field-resolution boundary:
 - `singleTablePagination()` uses the safe single-table path, normalizes `joinQuery`, and never logs replacements
 - `paginate()` uses the safe union path with the hardened rules below
 - `paginateSafe()` is an alias of `paginate()`
+- `paginateCursor()` adds phase-1 token pagination on top of the hardened single-table path
+- `resolveCursorPage()`, `encodeCursorFromRow()`, and `decodeCursor()` are part of the public `v2` cursor contract
 - `paginateLegacy()` is the explicit escape hatch back to legacy query behavior
 
 ## Default `v2` Behavior
@@ -107,6 +109,41 @@ Field-resolution boundary:
 - return aggregate `countQuery`
 - avoid the legacy `console.log(replacements)` side effect
 - throw `Error` objects instead of string throws
+
+## Cursor Contract
+
+`paginateCursor()` is `v2`-only and additive. It must not change `paginate()` or legacy behavior.
+
+Phase 1 cursor rules:
+
+- exactly one option block
+- `after` only
+- `sort` is required
+- `limit` is required
+- `pageNo`, `itemsPerPage`, `offset`, and `before` are rejected
+- `option.columnList` must include alias `id`
+- `query` fetches `limit + 1`
+- `resolveCursorPage()` trims the extra row and derives `pageInfo`
+
+Cursor return shape:
+
+```js
+{
+  countQuery,
+  totalCountQuery,
+  query,
+  replacements,
+  cursorPlan
+}
+```
+
+Cursor semantics:
+
+- `countQuery` stays aggregate
+- `totalCountQuery` stays aggregate
+- when `after` is present, both count queries include the cursor predicate
+- `cursorPlan.normalizedSort` stores alias-based sort fields
+- the token contains a query fingerprint and must not be reusable across different query shapes
 
 ## Count Semantics
 
@@ -132,11 +169,14 @@ These are `v2` contract points and should be treated as compatibility-sensitive:
 - `require("pagi-help")` must not start returning `PagiHelpV2`
 - `require("pagi-help/v2")` must keep returning the hardened `v2` class
 - `PagiHelpV2#paginate()` must remain hardened by default
+- `PagiHelpV2#paginateCursor()` must remain additive and phase-1-compatible unless intentionally versioned
 - `PagiHelpV2#paginateLegacy()` must remain the explicit legacy escape hatch
-- the return shape must remain `{ countQuery, totalCountQuery, query, replacements }`
+- the offset/page return shape must remain `{ countQuery, totalCountQuery, query, replacements }`
+- the cursor return shape must remain `{ countQuery, totalCountQuery, query, replacements, cursorPlan }`
 - omitted `search` and omitted `searchColumnList` must keep normalizing safely
 - MySQL and PostgreSQL pagination clauses must keep their dialect-specific ordering
 - PostgreSQL operator translations must stay stable unless intentionally versioned
+- cursor tokens must keep validating dialect, sort, and query fingerprint
 
 ## Reference Files
 

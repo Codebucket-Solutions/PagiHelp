@@ -1,6 +1,6 @@
 # PagiHelp
 
-`pagi-help@2.4.1` ships two APIs from one package.
+`pagi-help@2.5.0` ships two APIs from one package.
 
 - `require("pagi-help")` keeps the frozen legacy MySQL contract.
 - `require("pagi-help/v2")` is the current hardened API for new code.
@@ -163,6 +163,78 @@ Schema-qualified PostgreSQL names are supported on `v2`:
 - raw `additionalWhereConditions` can use fully-qualified fields like `"audit.licenses.organization_id"`
 - regular filters still resolve by alias or `prefix.column`, not by `schema.table.column`
 
+## Quick Start: Cursor Pagination
+
+`paginateCursor()` is available on `v2` only.
+
+Phase 1 rules:
+
+- single-table only
+- `after` only
+- `sort` is required
+- `limit` is required
+- `pageNo`, `itemsPerPage`, `offset`, and `before` are rejected
+- the selected columns must include alias `id`
+
+```js
+const PagiHelpV2 = require("pagi-help/v2");
+
+const pagiHelp = new PagiHelpV2({
+  dialect: "postgres",
+});
+
+const cursorQueries = pagiHelp.paginateCursor(
+  {
+    search: "mail",
+    filters: [["stage", "=", "OPEN"]],
+    sort: {
+      attributes: ["createdAt"],
+      sorts: ["desc"],
+    },
+    limit: 20,
+    after: existingCursorToken,
+  },
+  [
+    {
+      tableName: "audit.licenses",
+      columnList: [
+        { name: "license_id", alias: "id" },
+        { name: "created_at", alias: "createdAt" },
+        { name: "stage", alias: "stage" },
+      ],
+      searchColumnList: [{ name: "stage" }],
+    },
+  ]
+);
+```
+
+Cursor helpers:
+
+- `paginateCursor()` returns SQL plus `cursorPlan`
+- `query` fetches `limit + 1` rows
+- `resolveCursorPage(rows, cursorPlan)` trims the extra row and returns `pageInfo`
+- `encodeCursorFromRow(row, cursorPlan)` builds an opaque `after` token
+- `decodeCursor(token)` decodes and validates the token envelope
+
+Cursor return shape:
+
+```js
+{
+  countQuery,
+  totalCountQuery,
+  query,
+  replacements,
+  cursorPlan
+}
+```
+
+Important cursor semantics:
+
+- `countQuery` and `totalCountQuery` remain aggregate on `v2`
+- when `after` is present, both count queries include the cursor predicate
+- MySQL cursor pagination uses `LIMIT ?,?` with replacements `[0, limit + 1]`
+- PostgreSQL cursor pagination uses `LIMIT ? OFFSET ?` with replacements `[limit + 1, 0]`
+
 ## Return Shape
 
 Both APIs return:
@@ -230,7 +302,7 @@ Dialect-specific rendering on `v2`:
 - `AGENTS.md`: repo-level instructions for Codex and other agents
 - `docs/AGENT_USAGE.md`: agent-facing quick reference for current `v2`
 - `docs/V2_BASELINE.md`: maintainer contract for current `v2`
-- `docs/V2_CURSOR_PAGINATION_DESIGN.md`: future cursor-pagination design for `v2` (not implemented yet)
+- `docs/V2_CURSOR_PAGINATION_DESIGN.md`: implemented phase-1 cursor contract plus future roadmap
 - `docs/MAINTENANCE_BASELINE.md`: frozen legacy default-export contract
 - `docs/legacy/README.md`: legacy archive entrypoint
 - `docs/CONSUMER_USAGE_AUDIT.md`: downstream legacy usage audit
@@ -240,6 +312,7 @@ Dialect-specific rendering on `v2`:
 - `test/postgres.characterization.test.js`: PostgreSQL `v2` regression coverage
 - `examples/v2.js`: MySQL `v2` example
 - `examples/v2-postgres.js`: PostgreSQL `v2` example
+- `examples/v2-cursor.js`: `v2` cursor pagination example
 
 ## Release Verification
 

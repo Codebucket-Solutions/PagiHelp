@@ -268,4 +268,10 @@ module.exports = {
 
     return query;
   },
+
+  applyCursorPagination(query, fetchLimit, replacements) {
+    query += " LIMIT ? OFFSET ?";
+    replacements.push(fetchLimit, 0);
+    return query;
+  },
 };

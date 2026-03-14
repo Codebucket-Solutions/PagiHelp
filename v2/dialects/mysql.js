@@ -104,4 +104,10 @@ module.exports = {
 
     return query;
   },
+
+  applyCursorPagination(query, fetchLimit, replacements) {
+    query += " LIMIT ?,?";
+    replacements.push(0, fetchLimit);
+    return query;
+  },
 };

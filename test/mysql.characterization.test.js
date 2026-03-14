@@ -2046,6 +2046,201 @@ test("v2 preserves validated operator SQL shapes", () => {
   });
 });
 
+test("v2 mysql paginateCursor builds additive single-table cursor queries", () => {
+  const pagiHelp = new PagiHelpV210();
+  const options = [
+    {
+      tableName: "users",
+      columnList: [
+        { name: "id", alias: "id" },
+        { name: "created_at", alias: "createdAt" },
+        { name: "status", alias: "status" },
+      ],
+      searchColumnList: [],
+      additionalWhereConditions: [["status", "=", "Active"]],
+    },
+  ];
+
+  const firstPage = runQuietly(() =>
+    pagiHelp.paginateCursor(
+      {
+        search: "",
+        sort: {
+          attributes: ["createdAt"],
+          sorts: ["desc"],
+        },
+        limit: 2,
+      },
+      clone(options)
+    )
+  );
+
+  assert.deepStrictEqual(
+    {
+      countQuery: firstPage.countQuery,
+      totalCountQuery: firstPage.totalCountQuery,
+      query: firstPage.query,
+      replacements: firstPage.replacements,
+    },
+    {
+      countQuery:
+        "SELECT COUNT(*) AS countValue  FROM `users` WHERE (status = ?)",
+      totalCountQuery:
+        "SELECT COUNT(*) AS countValue  FROM `users` WHERE (status = ?)",
+      query:
+        "SELECT id AS id,created_at AS createdAt,status AS status FROM `users` WHERE (status = ?) ORDER BY `createdAt`DESC,`id`DESC LIMIT ?,?",
+      replacements: ["Active", 0, 3],
+    }
+  );
+
+  assert.deepStrictEqual(firstPage.cursorPlan, {
+    version: 1,
+    dialect: "mysql",
+    direction: "forward",
+    requestedLimit: 2,
+    fetchLimit: 3,
+    normalizedSort: [
+      { attribute: "createdAt", direction: "DESC" },
+      { attribute: "id", direction: "DESC" },
+    ],
+    cursorAliases: ["createdAt", "id"],
+    queryFingerprint: firstPage.cursorPlan.queryFingerprint,
+    after: null,
+  });
+  assert.match(firstPage.cursorPlan.queryFingerprint, /^[a-f0-9]{64}$/);
+
+  const cursor = pagiHelp.encodeCursorFromRow(
+    {
+      id: 9,
+      createdAt: "2026-03-14T10:00:00.000Z",
+      status: "Active",
+    },
+    firstPage.cursorPlan
+  );
+
+  assert.deepStrictEqual(pagiHelp.decodeCursor(cursor), {
+    v: 1,
+    d: "mysql",
+    fp: firstPage.cursorPlan.queryFingerprint,
+    s: [
+      ["createdAt", "DESC"],
+      ["id", "DESC"],
+    ],
+    values: ["2026-03-14T10:00:00.000Z", 9],
+    dir: "after",
+  });
+
+  const nextPage = runQuietly(() =>
+    pagiHelp.paginateCursor(
+      {
+        search: "",
+        sort: {
+          attributes: ["createdAt"],
+          sorts: ["desc"],
+        },
+        limit: 2,
+        after: cursor,
+      },
+      clone(options)
+    )
+  );
+
+  assert.deepStrictEqual(
+    {
+      countQuery: nextPage.countQuery,
+      totalCountQuery: nextPage.totalCountQuery,
+      query: nextPage.query,
+      replacements: nextPage.replacements,
+    },
+    {
+      countQuery:
+        "SELECT COUNT(*) AS countValue  FROM `users` WHERE (status = ?) AND ((created_at) < ? OR ((created_at) = ? AND (id) < ?))",
+      totalCountQuery:
+        "SELECT COUNT(*) AS countValue  FROM `users` WHERE (status = ?) AND ((created_at) < ? OR ((created_at) = ? AND (id) < ?))",
+      query:
+        "SELECT id AS id,created_at AS createdAt,status AS status FROM `users` WHERE (status = ?) AND ((created_at) < ? OR ((created_at) = ? AND (id) < ?)) ORDER BY `createdAt`DESC,`id`DESC LIMIT ?,?",
+      replacements: [
+        "Active",
+        "2026-03-14T10:00:00.000Z",
+        "2026-03-14T10:00:00.000Z",
+        9,
+        0,
+        3,
+      ],
+    }
+  );
+
+  const resolvedPage = pagiHelp.resolveCursorPage(
+    [
+      { id: 11, createdAt: "2026-03-16T10:00:00.000Z", status: "Active" },
+      { id: 10, createdAt: "2026-03-15T10:00:00.000Z", status: "Active" },
+      { id: 9, createdAt: "2026-03-14T10:00:00.000Z", status: "Active" },
+    ],
+    firstPage.cursorPlan
+  );
+
+  const expectedStartCursor = pagiHelp.encodeCursorFromRow(
+    resolvedPage.rows[0],
+    firstPage.cursorPlan
+  );
+  const expectedEndCursor = pagiHelp.encodeCursorFromRow(
+    resolvedPage.rows[1],
+    firstPage.cursorPlan
+  );
+
+  assert.deepStrictEqual(resolvedPage, {
+    rows: [
+      { id: 11, createdAt: "2026-03-16T10:00:00.000Z", status: "Active" },
+      { id: 10, createdAt: "2026-03-15T10:00:00.000Z", status: "Active" },
+    ],
+    pageInfo: {
+      hasNextPage: true,
+      hasPreviousPage: false,
+      startCursor: expectedStartCursor,
+      endCursor: expectedEndCursor,
+      nextCursor: expectedEndCursor,
+    },
+  });
+});
+
+test("v2 mysql cursor validation rejects unsupported shapes", () => {
+  const pagiHelp = new PagiHelpV210();
+
+  const validation = pagiHelp.validateCursorPaginationInput(
+    {
+      search: "",
+      before: "abc",
+      offset: 0,
+    },
+    [
+      {
+        tableName: "users",
+        columnList: [{ name: "name", alias: "name" }],
+        searchColumnList: [],
+      },
+      {
+        tableName: "archived_users",
+        columnList: [{ name: "id", alias: "id" }],
+        searchColumnList: [],
+      },
+    ]
+  );
+
+  assert.deepStrictEqual(validation, {
+    valid: false,
+    errors: [
+      'cursorPaginationObject.before is not supported; use "after" only',
+      "cursorPaginationObject.offset is not supported in paginateCursor()",
+      "cursorPaginationObject.limit is required in paginateCursor()",
+      "paginateCursor() currently supports exactly one option block",
+      "cursorPaginationObject.sort is required in paginateCursor()",
+    ],
+    warnings: [
+      'options[0].columnList does not include alias "id"',
+    ],
+  });
+});
+
 test("invalid filter fields, operators, and sort values throw the current string errors", () => {
   const pagiHelp = new PagiHelp();
 

@@ -228,6 +228,11 @@ declare class PagiHelpV210 extends PagiHelp {
     options: PagiHelpV210.PaginationOption[]
   ): PagiHelp.ValidationResult;
 
+  validateCursorPaginationInput(
+    paginationObject: PagiHelpV210.CursorPaginationInput,
+    options: PagiHelpV210.PaginationOption[]
+  ): PagiHelp.ValidationResult;
+
   resolveSafeOptions(
     safeOptions?: PagiHelpV210.SafeOptions
   ): PagiHelp.ResolvedSafePaginateOptions;
@@ -295,6 +300,43 @@ declare class PagiHelpV210 extends PagiHelp {
     options: PagiHelpV210.PaginationOption[],
     safeOptions?: PagiHelpV210.SafeOptions
   ): PagiHelp.PaginationResult;
+
+  /**
+   * Phase-1 token pagination for the hardened `v2` path.
+   *
+   * Rules:
+   * - exactly one option block
+   * - `sort` is required
+   * - `limit` is required
+   * - `after` is supported
+   * - `before`, `pageNo`, `itemsPerPage`, and `offset` are rejected
+   */
+  paginateCursor(
+    paginationObject: PagiHelpV210.CursorPaginationInput,
+    options: PagiHelpV210.PaginationOption[],
+    safeOptions?: PagiHelpV210.SafeOptions
+  ): PagiHelpV210.CursorPaginationResult;
+
+  /**
+   * Trim the extra fetched row and derive cursor metadata.
+   */
+  resolveCursorPage<Row extends Record<string, unknown>>(
+    rows: Row[],
+    cursorPlan: PagiHelpV210.CursorPlan
+  ): PagiHelpV210.CursorPage<Row>;
+
+  /**
+   * Encode an opaque `after` token from one query row.
+   */
+  encodeCursorFromRow(
+    row: Record<string, unknown>,
+    cursorPlan: PagiHelpV210.CursorPlan
+  ): string;
+
+  /**
+   * Decode and validate the token envelope.
+   */
+  decodeCursor(cursorToken: string): PagiHelpV210.DecodedCursorToken;
 
   paginateLegacy(
     paginationObject: PagiHelp.PaginationInput,
@@ -537,6 +579,80 @@ declare namespace PagiHelpV210 {
   interface PaginationOption
     extends Omit<PagiHelp.PaginationOption, "searchColumnList"> {
     searchColumnList?: PagiHelp.SearchColumnDescriptor[];
+  }
+
+  interface CursorPaginationInput
+    extends Omit<
+      PaginationInput,
+      "pageNo" | "itemsPerPage" | "offset" | "sort"
+    > {
+    /**
+     * Required deterministic ordering for cursor mode.
+     *
+     * `id` is appended automatically as the final tie-breaker when needed.
+     */
+    sort: PagiHelp.SortInput;
+    /**
+     * Requested page size. The generated SQL fetches `limit + 1`.
+     */
+    limit: number;
+    /**
+     * Opaque token returned from a prior cursor page.
+     */
+    after?: string;
+    /**
+     * Reserved for a future phase. Rejected in the current runtime.
+     */
+    before?: string;
+  }
+
+  interface CursorSortField {
+    attribute: string;
+    direction: PagiHelp.SortDirection;
+  }
+
+  interface CursorPlan {
+    version: 1;
+    dialect: Dialect;
+    direction: "forward";
+    requestedLimit: number;
+    /**
+     * Actual SQL fetch size. This is always `requestedLimit + 1`.
+     */
+    fetchLimit: number;
+    normalizedSort: CursorSortField[];
+    cursorAliases: string[];
+    queryFingerprint: string;
+    after: string | null;
+  }
+
+  interface CursorPaginationResult extends PagiHelp.PaginationResult {
+    /**
+     * Cursor metadata consumed by `resolveCursorPage()` and `encodeCursorFromRow()`.
+     */
+    cursorPlan: CursorPlan;
+  }
+
+  interface CursorPageInfo {
+    hasNextPage: boolean;
+    hasPreviousPage: boolean;
+    startCursor: string | null;
+    endCursor: string | null;
+    nextCursor: string | null;
+  }
+
+  interface CursorPage<Row extends Record<string, unknown>> {
+    rows: Row[];
+    pageInfo: CursorPageInfo;
+  }
+
+  interface DecodedCursorToken {
+    v: 1;
+    d: Dialect;
+    fp: string;
+    s: [attribute: string, direction: PagiHelp.SortDirection][];
+    values: unknown[];
+    dir: "after";
   }
 
   interface ConstructorOptions extends PagiHelp.ConstructorOptions {

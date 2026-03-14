@@ -1,6 +1,6 @@
 # Agent Usage Guide
 
-This file is the agent-facing quick reference for `pagi-help@2.4.1`.
+This file is the agent-facing quick reference for `pagi-help@2.5.0`.
 
 ## Entry Points
 
@@ -96,6 +96,75 @@ Important semantics:
 - legacy `countQuery` is row-select
 - `query` is the data query
 - `totalCountQuery` remains aggregate in both paths
+
+## Cursor API
+
+`paginateCursor()` is additive on `v2`.
+
+Methods:
+
+- `paginateCursor(cursorPaginationObject, options)`
+- `resolveCursorPage(rows, cursorPlan)`
+- `encodeCursorFromRow(row, cursorPlan)`
+- `decodeCursor(cursorToken)`
+- `validateCursorPaginationInput(cursorPaginationObject, options)`
+
+Phase 1 rules:
+
+- `v2` only
+- exactly one option block
+- `after` only
+- `sort` is required
+- `limit` is required
+- `pageNo`, `itemsPerPage`, `offset`, and `before` are rejected
+- `columnList` must contain alias `id`
+
+Cursor return shape:
+
+```js
+{
+  countQuery,
+  totalCountQuery,
+  query,
+  replacements,
+  cursorPlan
+}
+```
+
+Cursor semantics:
+
+- `query` fetches `limit + 1` rows
+- `resolveCursorPage()` trims the extra row and returns `pageInfo`
+- `hasPreviousPage` becomes `true` when an `after` token was used
+- `countQuery` and `totalCountQuery` stay aggregate and include the cursor predicate when `after` is present
+- the token is opaque base64url JSON with a query fingerprint
+
+Example:
+
+```js
+const result = pagiHelp.paginateCursor(
+  {
+    filters: [["stage", "=", "OPEN"]],
+    sort: {
+      attributes: ["createdAt"],
+      sorts: ["desc"],
+    },
+    limit: 20,
+    after: cursorToken,
+  },
+  [
+    {
+      tableName: "audit.licenses",
+      columnList: [
+        { name: "license_id", alias: "id" },
+        { name: "created_at", alias: "createdAt" },
+        { name: "stage", alias: "stage" },
+      ],
+      searchColumnList: [{ name: "stage" }],
+    },
+  ]
+);
+```
 
 ## `v2` Contract
 

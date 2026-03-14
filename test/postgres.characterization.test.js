@@ -197,6 +197,199 @@ test("v2 postgres supports postgres-native operators in filters and validation",
   });
 });
 
+test("v2 postgres paginateCursor supports native operators and schema-qualified tables", () => {
+  const pagiHelp = new PagiHelpV210({
+    dialect: "postgres",
+  });
+  const options = [
+    {
+      tableName: "audit.users",
+      columnList: [
+        { name: "id", alias: "id" },
+        { name: "created_at", alias: "createdAt" },
+        { name: "meta_info", alias: "metaInfo" },
+      ],
+      searchColumnList: [],
+      additionalWhereConditions: [["audit.users.organization_id", "=", 42]],
+    },
+  ];
+
+  const firstPage = runQuietly(() =>
+    pagiHelp.paginateCursor(
+      {
+        search: "",
+        filters: [["metaInfo", "@>", { role: "admin" }]],
+        sort: {
+          attributes: ["createdAt"],
+          sorts: ["desc"],
+        },
+        limit: 2,
+      },
+      clone(options)
+    )
+  );
+
+  assert.deepStrictEqual(
+    {
+      countQuery: firstPage.countQuery,
+      totalCountQuery: firstPage.totalCountQuery,
+      query: firstPage.query,
+      replacements: firstPage.replacements,
+    },
+    {
+      countQuery:
+        'SELECT COUNT(*) AS countValue  FROM "audit"."users" WHERE (audit.users.organization_id = ?) AND ((meta_info)::jsonb @> (?::jsonb))',
+      totalCountQuery:
+        'SELECT COUNT(*) AS countValue  FROM "audit"."users" WHERE (audit.users.organization_id = ?) AND ((meta_info)::jsonb @> (?::jsonb))',
+      query:
+        'SELECT id AS id,created_at AS createdAt,meta_info AS metaInfo FROM "audit"."users" WHERE (audit.users.organization_id = ?) AND ((meta_info)::jsonb @> (?::jsonb)) ORDER BY "createdAt"DESC,"id"DESC LIMIT ? OFFSET ?',
+      replacements: [42, '{"role":"admin"}', 3, 0],
+    }
+  );
+
+  assert.deepStrictEqual(firstPage.cursorPlan.normalizedSort, [
+    { attribute: "createdAt", direction: "DESC" },
+    { attribute: "id", direction: "DESC" },
+  ]);
+
+  const cursor = pagiHelp.encodeCursorFromRow(
+    {
+      id: 7,
+      createdAt: "2026-03-14T10:00:00.000Z",
+      metaInfo: { role: "admin" },
+    },
+    firstPage.cursorPlan
+  );
+
+  const nextPage = runQuietly(() =>
+    pagiHelp.paginateCursor(
+      {
+        search: "",
+        filters: [["metaInfo", "@>", { role: "admin" }]],
+        sort: {
+          attributes: ["createdAt"],
+          sorts: ["desc"],
+        },
+        limit: 2,
+        after: cursor,
+      },
+      clone(options)
+    )
+  );
+
+  assert.deepStrictEqual(
+    {
+      countQuery: nextPage.countQuery,
+      totalCountQuery: nextPage.totalCountQuery,
+      query: nextPage.query,
+      replacements: nextPage.replacements,
+    },
+    {
+      countQuery:
+        'SELECT COUNT(*) AS countValue  FROM "audit"."users" WHERE (audit.users.organization_id = ?) AND ((meta_info)::jsonb @> (?::jsonb)) AND ((created_at) < ? OR ((created_at) = ? AND (id) < ?))',
+      totalCountQuery:
+        'SELECT COUNT(*) AS countValue  FROM "audit"."users" WHERE (audit.users.organization_id = ?) AND ((meta_info)::jsonb @> (?::jsonb)) AND ((created_at) < ? OR ((created_at) = ? AND (id) < ?))',
+      query:
+        'SELECT id AS id,created_at AS createdAt,meta_info AS metaInfo FROM "audit"."users" WHERE (audit.users.organization_id = ?) AND ((meta_info)::jsonb @> (?::jsonb)) AND ((created_at) < ? OR ((created_at) = ? AND (id) < ?)) ORDER BY "createdAt"DESC,"id"DESC LIMIT ? OFFSET ?',
+      replacements: [
+        42,
+        '{"role":"admin"}',
+        "2026-03-14T10:00:00.000Z",
+        "2026-03-14T10:00:00.000Z",
+        7,
+        3,
+        0,
+      ],
+    }
+  );
+
+  const resolvedPage = pagiHelp.resolveCursorPage(
+    [
+      { id: 9, createdAt: "2026-03-16T10:00:00.000Z", metaInfo: { role: "admin" } },
+      { id: 8, createdAt: "2026-03-15T10:00:00.000Z", metaInfo: { role: "admin" } },
+      { id: 7, createdAt: "2026-03-14T10:00:00.000Z", metaInfo: { role: "admin" } },
+    ],
+    {
+      ...firstPage.cursorPlan,
+      after: cursor,
+    }
+  );
+
+  assert.deepStrictEqual(resolvedPage.pageInfo, {
+    hasNextPage: true,
+    hasPreviousPage: true,
+    startCursor: pagiHelp.encodeCursorFromRow(resolvedPage.rows[0], firstPage.cursorPlan),
+    endCursor: pagiHelp.encodeCursorFromRow(resolvedPage.rows[1], firstPage.cursorPlan),
+    nextCursor: pagiHelp.encodeCursorFromRow(resolvedPage.rows[1], firstPage.cursorPlan),
+  });
+});
+
+test("v2 postgres paginateCursor rejects mismatched cursor tokens", () => {
+  const pagiHelp = new PagiHelpV210({
+    dialect: "postgres",
+  });
+
+  const firstPage = runQuietly(() =>
+    pagiHelp.paginateCursor(
+      {
+        search: "",
+        sort: {
+          attributes: ["createdAt"],
+          sorts: ["desc"],
+        },
+        limit: 2,
+      },
+      [
+        {
+          tableName: "users",
+          columnList: [
+            { name: "id", alias: "id" },
+            { name: "created_at", alias: "createdAt" },
+          ],
+          searchColumnList: [],
+        },
+      ]
+    )
+  );
+
+  const cursor = pagiHelp.encodeCursorFromRow(
+    {
+      id: 5,
+      createdAt: "2026-03-10T10:00:00.000Z",
+    },
+    firstPage.cursorPlan
+  );
+
+  expectThrowMessage(
+    () =>
+      runQuietly(() =>
+        pagiHelp.paginateCursor(
+          {
+            search: "",
+            filters: [["id", ">", 10]],
+            sort: {
+              attributes: ["createdAt"],
+              sorts: ["desc"],
+            },
+            limit: 2,
+            after: cursor,
+          },
+          [
+            {
+              tableName: "users",
+              columnList: [
+                { name: "id", alias: "id" },
+                { name: "created_at", alias: "createdAt" },
+              ],
+              searchColumnList: [],
+            },
+          ]
+        )
+      ),
+    "Cursor token does not match the current query"
+  );
+});
+
 test("v2 postgres uses LIMIT/OFFSET for direct offset pagination too", () => {
   const pagiHelp = new PagiHelpV210({
     dialect: "postgres",

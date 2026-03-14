@@ -1,12 +1,14 @@
 # PagiHelp v2 Cursor Pagination Design
 
-This document records the proposed `v2` cursor-pagination design for a future release. It is a design reference only.
+This document records the shipped phase-1 `v2` cursor-pagination contract and the remaining roadmap for later phases.
 
 Status:
 
-- not implemented as of `pagi-help@2.4.1`
-- does not change the current `paginate()` contract
+- implemented for `v2` in `pagi-help@2.5.0`
+- additive; does not change the current `paginate()` contract
 - does not change the legacy default export
+- phase 1 is single-table-only and `after`-only
+- `before`, reverse traversal helpers, and multi-table cursor mode remain future work
 
 ## Goals
 
@@ -34,7 +36,7 @@ These points must remain true when cursor pagination is implemented:
 - all current characterization tests must continue to pass
 - cursor pagination starts as single-table only
 
-## Proposed Public API
+## Public API
 
 Add these new `v2` methods:
 
@@ -48,7 +50,7 @@ validateCursorPaginationInput(cursorPaginationObject, options)
 
 `paginateCursor()` remains a SQL builder. It does not fetch rows.
 
-## Proposed Input Shape
+## Input Shape
 
 ```js
 {
@@ -84,7 +86,7 @@ To know whether there is another page, cursor pagination needs one extra row:
 
 That keeps the library compatible with its current role as a query builder.
 
-## Proposed `paginateCursor()` Return Shape
+## `paginateCursor()` Return Shape
 
 ```js
 {
@@ -101,6 +103,7 @@ Notes:
 - `countQuery` and `totalCountQuery` keep the current `v2` aggregate semantics
 - `query` is the data query with cursor predicate and `limit + 1`
 - `cursorPlan` is new and is used by `resolveCursorPage()` and `encodeCursorFromRow()`
+- when `after` is present, `countQuery` and `totalCountQuery` include the cursor predicate
 
 Example `cursorPlan`:
 
@@ -120,7 +123,7 @@ Example `cursorPlan`:
 }
 ```
 
-## Proposed `resolveCursorPage()` Return Shape
+## `resolveCursorPage()` Return Shape
 
 ```js
 {
@@ -367,9 +370,9 @@ This should remain a metadata adapter only. It should not become a full Sequeliz
 - invalid or mismatched cursor token
 - query fingerprint mismatch
 
-## Proposed Implementation Order
+## Implementation Status
 
-Phase 1:
+Shipped in phase 1:
 
 - `paginateCursor()`
 - `resolveCursorPage()`
@@ -380,35 +383,38 @@ Phase 1:
 - `after` only
 - MySQL and PostgreSQL
 
-Phase 2:
+Still future work for phase 2:
 
 - `before`
 - reverse traversal helpers
 - `prevCursor`
 
-Phase 3:
+Still future work for phase 3:
 
 - evaluate multi-table cursor pagination only if there is a real consumer need
 
-## Test Plan
+## Test Coverage
 
-When implemented, add:
+Current coverage includes:
 
 - MySQL single-table cursor tests
 - PostgreSQL single-table cursor tests
 - token encode/decode tests
 - fingerprint mismatch tests
+- schema-qualified PostgreSQL table tests
+
+Still worth adding later:
+
 - mixed-direction sort tests
 - null cursor value rejection tests
-- schema-qualified PostgreSQL table tests
 - Sequelize model metadata adapter tests if that feature is added
 
 Legacy tests must remain unchanged.
 
 ## Current Recommendation For Agents
 
-Until this feature is implemented:
-
-- use `paginate()` for page/offset workflows
-- do not invent `paginateCursor()` in code changes
-- if a user asks for cursor pagination, point to this design doc and treat it as unimplemented future work
+- use `paginateCursor()` only on `require("pagi-help/v2")`
+- treat cursor mode as single-table-only and `after`-only
+- use `resolveCursorPage()` after executing the generated query
+- keep `paginate()` for page/offset workflows and for multi-table queries
+- use this file as the cursor contract reference and as the roadmap for future phases
