@@ -1,8 +1,9 @@
 # PagiHelp
 
-Generalized API helper for MySQL search, filters, sorting, and pagination.
+`pagi-help@2.1.0` ships two APIs from one package.
 
-This repository now treats the current `1.3.0` runtime behavior as the stable contract.
+- `require("pagi-help")` keeps the legacy `1.3.0` / `1.x` contract exactly.
+- `require("pagi-help/v2")` or `require("pagi-help").PagiHelpV210` is the new `2.1.0` class for new code.
 
 ## Installation
 
@@ -10,146 +11,49 @@ This repository now treats the current `1.3.0` runtime behavior as the stable co
 npm install pagi-help
 ```
 
-## Include
+## Choose Your API
+
+Preferred for new integrations:
+
+```js
+const PagiHelpV210 = require("pagi-help/v2");
+
+const pagiHelp = new PagiHelpV210();
+```
+
+Legacy compatibility for existing applications:
 
 ```js
 const PagiHelp = require("pagi-help");
+
+const pagiHelp = new PagiHelp();
 ```
 
-## Stable Contract References
-
-Use these files as the authoritative references for the current behavior:
-
-- `README.md`: public quick start
-- `docs/AGENT_USAGE.md`: concise usage guide for AI agents and maintainers
-- `docs/MAINTENANCE_BASELINE.md`: detailed runtime contract and known quirks
-- `test/characterization.test.js`: regression suite for current SQL generation behavior
-- `examples/`: runnable example query-generation setups
-
-## Main API
+Named exports are also available:
 
 ```js
-const pagiHelp = new PagiHelp({
-  columnNameConverter: (name) => name,
+const {
+  PagiHelpLegacy,
+  PagiHelpV210,
+  PagiHelpV2,
+} = require("pagi-help");
+```
+
+## Quick Start: `2.1.0`
+
+```js
+const PagiHelpV210 = require("pagi-help/v2");
+
+const pagiHelp = new PagiHelpV210({
+  columnNameConverter: (name) =>
+    name.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`),
 });
 
-const queries = pagiHelp.paginate(paginationObject, options);
-```
-
-Return shape:
-
-```js
-{
-  countQuery,
-  totalCountQuery,
-  query,
-  replacements
-}
-```
-
-Meaning:
-
-- `query`: data query, with optional `ORDER BY` and `LIMIT`
-- `countQuery`: row-select query without `ORDER BY` and `LIMIT`
-- `totalCountQuery`: actual aggregate count query
-- `replacements`: bound values for the generated SQL
-
-Important:
-
-- `countQuery` is not `COUNT(*)`
-- use `totalCountQuery` when you need the real total count
-
-## Release Verification
-
-Before publishing, run:
-
-```bash
-npm run release:verify
-```
-
-That runs:
-
-- the characterization suite
-- declaration-file validation
-- `npm pack --dry-run`
-
-## Validation Helpers
-
-The package now includes additive validation helpers that do not change `paginate()` behavior:
-
-```js
-const report = pagiHelp.validatePaginationInput(body, options);
-
-if (!report.valid) {
-  console.error(report.errors);
-}
-
-if (report.warnings.length > 0) {
-  console.warn(report.warnings);
-}
-```
-
-Available helpers:
-
-- `validatePaginationObject(paginationObject)`
-- `validateOptions(options)`
-- `validatePaginationInput(paginationObject, options)`
-
-These helpers are intended for preflight checks in apps, wrappers, and AI-generated integrations.
-
-## Safe API
-
-For new integrations, prefer:
-
-```js
-const result = pagiHelp.paginateSafe(paginationObject, options);
-```
-
-`paginateSafe()` returns the same shape as `paginate()`:
-
-```js
-{
-  countQuery,
-  totalCountQuery,
-  query,
-  replacements
-}
-```
-
-Default safe behavior:
-
-- does not mutate caller sort arrays
-- clones options before union padding
-- normalizes `joinQuery` spacing
-- coerces missing `search` to `""`
-- omits dangling `WHERE`
-- rejects `searchColumnList.alias`
-- rejects empty `IN` arrays
-- uses aggregate `countQuery` by default
-- validates inputs before building SQL
-
-Available `safeOptions`:
-
-- `cloneSort`
-- `cloneOptions`
-- `normalizeJoinQuery`
-- `coerceUndefinedSearchToEmpty`
-- `omitEmptyWhere`
-- `rejectSearchAliases`
-- `emptyInStrategy`: `"throw" | "static" | "legacy"`
-- `countQueryMode`: `"aggregate" | "select"`
-- `validate`
-
-Use legacy `paginate()` only when you intentionally need the old SQL shape and quirks.
-
-## Quick Start
-
-```js
-const body = {
+const paginationObject = {
   search: "mail",
   filters: [
-    ["assigned_to_me", "=", "Yes"],
-    ["l.stage", "IN", ["NEW", "PROCESSING"]],
+    ["assignedToMe", "=", "Yes"],
+    ["stage", "IN", ["NEW", "PROCESSING"]],
   ],
   sort: {
     attributes: ["createdDate"],
@@ -177,267 +81,159 @@ const options = [
       { name: "stage", prefix: "l" },
     ],
     joinQuery:
-      " l left join investor_registration i on l.investor_id = i.investor_id ",
+      "l LEFT JOIN investor_registration i ON l.investor_id = i.investor_id",
     additionalWhereConditions: [["l.status", "=", "Active"]],
   },
 ];
 
-const pagiHelp = new PagiHelp({
-  columnNameConverter: (name) =>
-    name.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`),
-});
-
-const queries = pagiHelp.paginate(body, options);
-
-const totalCountRows = await sequelize.query(queries.totalCountQuery, {
-  replacements: queries.replacements,
-  type: QueryTypes.SELECT,
-});
-
-const data = await sequelize.query(queries.query, {
-  replacements: queries.replacements,
-  type: QueryTypes.SELECT,
-});
-
-return {
-  data,
-  totalCount: totalCountRows[0]?.countValue ?? 0,
-};
+const queries = pagiHelp.paginate(paginationObject, options);
 ```
 
-## `paginationObject`
-
-Expected shape:
+Return shape:
 
 ```js
 {
-  search: "xyz",
-  sort: {
-    attributes: ["createdDate"],
-    sorts: ["asc"]
-  },
+  countQuery,
+  totalCountQuery,
+  query,
+  replacements
+}
+```
+
+`2.1.0` semantics:
+
+- `query` is the data query with optional `ORDER BY` and `LIMIT`
+- `countQuery` is aggregate by default
+- `totalCountQuery` is also aggregate and stays available for compatibility
+- `replacements` contains the bound values in execution order
+
+Legacy default-export semantics:
+
+- `query` is still the data query
+- `countQuery` is still the old row-select query
+- `totalCountQuery` is still the real aggregate count query
+
+## What `2.1.0` Changes
+
+`PagiHelpV210` makes the old safe path the default `paginate()` behavior.
+
+Default behavior in the new class:
+
+- does not mutate caller sort arrays
+- does not mutate caller option objects before union padding
+- normalizes `joinQuery` spacing
+- coerces missing `search` to `""`
+- omits dangling `WHERE`
+- rejects `searchColumnList.alias`
+- rejects empty `IN` arrays
+- uses aggregate `countQuery`
+- validates inputs before generating SQL
+- does not log replacements from `singleTablePagination()`
+
+## Shared Input Model
+
+The data model stays the same across legacy and `2.1.0`.
+
+`paginationObject`:
+
+```js
+{
+  search: "abc",
   filters: [
-    ["fromDate", "=", "2022-05-05"],
+    ["status", "=", "Active"],
     [
-      ["campaignDescription", "=", "abc"],
-      ["toDate", "=", "2022-06-05"]
+      ["stage", "=", "NEW"],
+      ["stage", "=", "PROCESSING"]
     ]
   ],
+  sort: {
+    attributes: ["createdDate"],
+    sorts: ["desc"]
+  },
   pageNo: 1,
   itemsPerPage: 20
 }
 ```
 
-Supported pagination modes:
+Filter semantics:
 
-- page mode: `pageNo` + `itemsPerPage`
-- offset mode: `offset` + `limit`
-
-Recommended defaults:
-
-- always pass `search` as a string
-- use `search: ""` when search is disabled
-
-## Filter Structure
-
-The basic filter unit is:
-
-```js
-[field, operator, value]
-```
-
-Examples:
-
-```js
-["status", "=", "Active"]
-["createdDate", ">=", "2024-01-01"]
-["stage", "IN", ["NEW", "PROCESSING"]]
-```
-
-Boolean semantics:
-
-- top-level filter items are joined with `AND`
+- top-level entries are joined with `AND`
 - nested arrays become `OR` groups
-- nesting can recurse
+- supported tuples use `[field, operator, value]`
 
-### `AND`
-
-```js
-filters: [
-  ["status", "=", "Active"],
-  ["createdDate", ">=", "2024-01-01"],
-];
-```
-
-Meaning:
-
-```sql
-status = ? AND created_date >= ?
-```
-
-### `OR`
-
-```js
-filters: [
-  ["status", "=", "Active"],
-  [
-    ["stage", "=", "NEW"],
-    ["stage", "=", "PROCESSING"],
-  ],
-];
-```
-
-Meaning:
-
-```sql
-status = ? AND (stage = ? OR stage = ?)
-```
-
-### `IN`
-
-```js
-filters: ["stage", "IN", ["NEW", "PROCESSING"]];
-filters: ["stage", "NOT IN", ["ARCHIVED", "DELETED"]];
-filters: ["role", "! IN", ["Guest"]];
-```
-
-### Other supported operators
-
-- `=`, `!=`, `<>`, `>`, `>=`, `<`, `<=`
-- `IN`, `NOT IN`, `! IN`
-- `IS`, `IS NOT`
-- `LIKE`, `RLIKE`, `MEMBER OF`
-- `JSON_CONTAINS`, `JSON_OVERLAPS`, `FIND_IN_SET`
-
-Examples:
-
-```js
-filters: ["metaInfo", "JSON_CONTAINS", { tags: ["vip"] }];
-filters: ["metaInfo", "JSON_OVERLAPS", { tags: ["vip"] }];
-filters: ["tags", "FIND_IN_SET", "vip"];
-```
-
-## Filter Field Resolution
-
-Filter fields can target:
-
-- exact aliases such as `"createdDate"`
-- snake_case forms of camelCase aliases such as `"created_date"`
-- literal `prefix.name` values such as `"l.stage"`
-- statement-backed aliases
-
-If no column matches, the library throws:
-
-```js
-"Invalid filter field: <field>"
-```
-
-## `columnList`
-
-Each `columnList` entry should use one of these shapes:
-
-### Plain column
+Common `columnList` shapes:
 
 ```js
 { name: "campaign_id", alias: "id" }
-```
-
-### Prefixed column
-
-```js
 { name: "created_date", prefix: "l", alias: "createdDate" }
+{ statement: "COUNT(*)", alias: "countValue" }
 ```
 
-### Statement column
-
-```js
-{
-  statement: '(SELECT IF(l.assigned_to="1","Yes","No"))',
-  alias: "assignedToMe",
-}
-```
-
-Field meaning:
-
-- `name`: database column name
-- `prefix`: table alias or qualifier placed before `name`
-- `alias`: logical output name after `AS`
-- `statement`: raw SQL expression used instead of `name`
-
-Rules:
-
-- `name` and `statement` are alternatives
-- `alias` is strongly recommended and is effectively required for filtering, sorting, and union alignment
-- include an `id` alias in normal application usage
-
-## `searchColumnList`
-
-Supported search entry shapes:
+Common `searchColumnList` shapes:
 
 ```js
 { name: "email" }
 { name: "email", prefix: "i" }
 { name: "xg.group_name" }
-{ statement: "(SELECT category_name FROM support_category WHERE id = support_raise_complain.category_id)" }
+{ statement: "(SELECT category_name FROM support_category WHERE id = src.category_id)" }
 ```
 
-Rules:
+Do not put `alias` in `searchColumnList` for new code.
 
-- always pass `searchColumnList`; use `[]` if there are no search columns
-- do not include `alias` in `searchColumnList`
-- statement expressions and raw dotted names are supported
+## Compatibility Levers
 
-## `additionalWhereConditions`
-
-`additionalWhereConditions` uses the same nesting structure as `filters`, but it runs in raw mode.
-
-That means:
-
-- operators are not validated
-- parenthesized string values can be inlined directly
-
-Examples:
+Constructor defaults for the new class:
 
 ```js
-additionalWhereConditions: [["status", "IN", "(SELECT status FROM live_statuses)"]];
-additionalWhereConditions: ["cc.status", "!=", "Deleted"];
+const pagiHelp = new PagiHelpV210({
+  safeOptions: {
+    countQueryMode: "select",
+    emptyInStrategy: "static",
+  },
+});
 ```
 
-## Sorting
+Per-call overrides:
 
-- allowed sort directions are `ASC` and `DESC`
-- input is case-insensitive
-- `paginate()` appends `id DESC` automatically as a tie-breaker
-- the `sort.attributes` and `sort.sorts` arrays are mutated in place
+```js
+const queries = pagiHelp.paginate(paginationObject, options, {
+  countQueryMode: "select",
+  rejectSearchAliases: false,
+});
+```
 
-## Multiple Tables (`UNION ALL`)
+Legacy escape hatch from a `2.1.0` instance:
 
-Pass multiple option blocks to `paginate()` to build a `UNION ALL`.
+```js
+const legacyQueries = pagiHelp.paginateLegacy(paginationObject, options);
+```
 
-Current behavior:
+Legacy class still exposes `paginateSafe()`, but new integrations should prefer the dedicated `v2` class instead of layering new work onto the legacy export.
 
-- branches are aligned by alias
-- missing aliases are padded with `(NULL)`
-- `totalCountQuery` becomes `SELECT SUM(countValue) ...`
+## Legacy Contract Still Ships
 
-## Important Runtime Notes
+This package does not force old users onto the new behavior.
 
-These are current real behaviors of `1.3.0`:
+- Existing `require("pagi-help")` code continues to use the legacy class.
+- Existing consumer quirks remain documented in the legacy baseline and audits.
+- New code should import `pagi-help/v2` explicitly.
 
-- `joinQuery` is concatenated directly after ``FROM `tableName``` with no normalization
-- if `search` is omitted and `searchColumnList` is non-empty, the library searches for `%undefined%`
-- if `searchColumnList` contains `alias`, the generated search SQL is invalid
-- if no filters, no additional conditions, and no non-empty search are present, the generated SQL ends with a dangling `WHERE`
-- empty arrays with `IN`-style operators produce invalid SQL such as `IN ()`
+## Docs Map
 
-## Type Information
+- `docs/AGENT_USAGE.md`: primary quick reference for `2.1.0`
+- `docs/V2_1_0_BASELINE.md`: detailed maintainer contract for the new class
+- `docs/MAINTENANCE_BASELINE.md`: legacy default-export contract
+- `docs/legacy/README.md`: legacy archive entrypoint
+- `docs/legacy/AGENT_USAGE_1.3.0.md`: legacy agent quick reference
+- `docs/CONSUMER_USAGE_AUDIT.md`: downstream legacy usage audit
+- `docs/CONSUMER_USAGE_AUDIT_XLEY.md`: second downstream legacy usage audit
+- `test/characterization.test.js`: regression suite for both legacy and `2.1.0`
+- `examples/`: runnable examples, including `examples/v2.js`
 
-The package ships TypeScript declarations in `index.d.ts`.
+## Release Verification
 
-## Exact Behavior
+Before publishing, run:
 
-For exact current behavior, quirks, and regression references, see:
-
-- `docs/AGENT_USAGE.md`
-- `docs/MAINTENANCE_BASELINE.md`
-- `test/characterization.test.js`
+```bash
+npm run release:verify
+```

@@ -6,7 +6,7 @@
   "types": "index.d.ts",
   "scripts": {
     "test": "node test/characterization.test.js",
-    "typecheck": "npx -p typescript tsc --noEmit --skipLibCheck index.d.ts",
+    "typecheck": "npx -p typescript tsc --noEmit --skipLibCheck index.d.ts v2.d.ts",
     "pack:dry-run": "npm pack --dry-run",
     "release:verify": "npm test && npm run typecheck && npm run pack:dry-run",
     "prepublishOnly": "npm run release:verify"

@@ -1,14 +1,18 @@
-# PagiHelp Maintenance Baseline
+# PagiHelp Legacy Maintenance Baseline
 
-This file captures the actual behavior of the library as shipped in `index.js` at package version `1.3.0`. It is intended to be the pre-change reference for future edits so improvements can be made without accidentally changing existing query-generation behavior.
+This file captures the legacy default-export behavior preserved in `index.js` at package version `2.1.0`. It remains the compatibility reference for `require("pagi-help")` and `PagiHelpLegacy`.
 
 ## Repository shape
 
-- `index.js` contains the full runtime implementation.
+- `index.js` contains the legacy default-export runtime implementation.
+- `v2.js` contains the new `2.1.0` class built on the `1.3.0` safe path.
 - `index.d.ts` provides machine-readable API shapes for editors and AI agents.
+- `v2.d.ts` provides the subpath declaration file for `require("pagi-help/v2")`.
 - `AGENTS.md` provides repo-specific usage and change instructions for AI agents.
-- `README.md` covers the main current usage contract and high-value caveats, but `docs/AGENT_USAGE.md` and this file remain the authoritative references for edge cases.
-- `docs/AGENT_USAGE.md` provides agent-facing canonical usage examples for the current runtime contract.
+- `README.md` covers the primary `2.1.0` usage path and the legacy split.
+- `docs/AGENT_USAGE.md` provides agent-facing canonical usage examples for the `2.1.0` class.
+- `docs/V2_1_0_BASELINE.md` records the maintainer contract for the new class.
+- `docs/legacy/README.md` and `docs/legacy/AGENT_USAGE_1.3.0.md` preserve the legacy guidance.
 - `examples/` provides runnable example setups for single-table, joined-table, and union usage.
 - `diagram.png` is a high-level concept diagram, not an exact representation of the generated SQL.
 - `docs/COMMIT_HISTORY_NOTES.md` traces every meaningful commit and maps it to current regression coverage.
@@ -18,11 +22,13 @@ This file captures the actual behavior of the library as shipped in `index.js` a
 
 ## Exported API
 
-The package exports one class:
+The default export remains the legacy class:
 
 ```js
 const PagiHelp = require("pagi-help");
 ```
+
+The package now also ships a separate `2.1.0` class, but that contract is documented in `docs/V2_1_0_BASELINE.md`.
 
 Constructor:
 
